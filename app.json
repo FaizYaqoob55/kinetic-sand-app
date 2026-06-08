@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "SandTable",
+    "slug": "sandtable",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0F"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sandtable.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used to scan QR code on your SandTable device.",
+        "NSLocalNetworkUsageDescription": "App connects to your SandTable over local network."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0F"
+      },
+      "package": "com.sandtable.app",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_STATE",
+        "ACCESS_NETWORK_STATE",
+        "CHANGE_NETWORK_STATE"
+      ]
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-barcode-scanner"
+    ]
+  }
+}
