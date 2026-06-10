@@ -266,8 +266,8 @@ export default function PatternLibraryScreen({ navigation }) {
         <View style={styles.chipsScrollWrapper}>
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator={isWeb}
-            style={[styles.chipsScroll, isWeb && { overflowX: 'auto' }]}
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
             contentContainerStyle={styles.chipsContent}
           >
             {FILTER_CHIPS.map((chip, index) => {
@@ -305,8 +305,7 @@ export default function PatternLibraryScreen({ navigation }) {
 
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator={isWeb}
-            style={[isWeb && { overflowX: 'auto' }]}
+            showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.featScroll}
           >
             {featuredPatterns.map(p => (
@@ -366,7 +365,7 @@ export default function PatternLibraryScreen({ navigation }) {
                   }
                 }}
               >
-                <Ionicons name="options" size={16} color="#888" />
+                <Ionicons name="options-outline" size={16} color="#888" />
               </TouchableOpacity>
             </View>
           </View>
