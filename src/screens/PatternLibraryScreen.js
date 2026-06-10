@@ -158,17 +158,28 @@ export default function PatternLibraryScreen({ navigation }) {
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [sortBy, setSortBy] = useState('Popular');
+  const [showSortMenu, setShowSortMenu] = useState(false);
 
   // Featured = 'featured' category patterns
   const featuredPatterns = PATTERNS.filter(p => p.category === 'featured');
 
   // All filtered patterns
-  const filteredPatterns = PATTERNS.filter(p => {
+  let filteredPatterns = PATTERNS.filter(p => {
     const chip = FILTER_CHIPS.find(c => c.id === activeFilter);
     const catMatch = !chip?.cat || p.category === chip.cat;
     const searchMatch = !search || p.name.toLowerCase().includes(search.toLowerCase());
     return catMatch && searchMatch;
   });
+
+  // Apply Sorting
+  if (sortBy === 'Duration') {
+    filteredPatterns.sort((a, b) => a.duration - b.duration);
+  } else if (sortBy === 'A-Z') {
+    filteredPatterns.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (sortBy === 'Newest') {
+    filteredPatterns.sort((a, b) => (a.isNew === b.isNew ? 0 : a.isNew ? -1 : 1));
+  }
+  // Popular is default, no sort needed or could use favorites count if it existed.
 
   const handlePatternPress = (pattern) => {
     HapticService.light();
@@ -252,33 +263,36 @@ export default function PatternLibraryScreen({ navigation }) {
         </View>
 
         {/* ── FILTER CHIPS ── */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipsScroll}
-          contentContainerStyle={styles.chipsContent}
-        >
-          {FILTER_CHIPS.map(chip => {
-            const active = activeFilter === chip.id;
-            return (
-              <TouchableOpacity
-                key={chip.id}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => { HapticService.light(); setActiveFilter(chip.id); }}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={chip.icon}
-                  size={13}
-                  color={active ? '#0A0A10' : '#888'}
-                />
-                <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>
-                  {chip.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <View style={styles.chipsScrollWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
+            contentContainerStyle={styles.chipsContent}
+          >
+            {FILTER_CHIPS.map((chip, index) => {
+              const active = activeFilter === chip.id;
+              const isLast = index === FILTER_CHIPS.length - 1;
+              return (
+                <TouchableOpacity
+                  key={chip.id}
+                  style={[styles.chip, active && styles.chipActive, { marginRight: isLast ? 0 : 8 }]}
+                  onPress={() => { HapticService.light(); setActiveFilter(chip.id); }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name={chip.icon}
+                    size={13}
+                    color={active ? '#0A0A10' : '#888'}
+                  />
+                  <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>
+                    {chip.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {/* ── FEATURED SECTION ── */}
         <View style={styles.section}>
@@ -310,17 +324,47 @@ export default function PatternLibraryScreen({ navigation }) {
         {/* ── ALL PATTERNS SECTION ── */}
         <View style={styles.section}>
           {/* Header row */}
-          <View style={styles.sectionHeader}>
+          <View style={[styles.sectionHeader, { zIndex: 10 }]}>
             <View>
               <Text style={styles.sectionTitle}>All Patterns</Text>
               <Text style={styles.patternCount}>{filteredPatterns.length} Patterns</Text>
             </View>
             <View style={styles.sortRow}>
-              <TouchableOpacity style={styles.sortBtn}>
-                <Text style={styles.sortTxt}>{sortBy}</Text>
-                <Ionicons name="chevron-down" size={12} color="#888" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.filterIconBtn}>
+              <View style={{ position: 'relative' }}>
+                <TouchableOpacity 
+                  style={styles.sortBtn} 
+                  onPress={() => setShowSortMenu(!showSortMenu)}
+                >
+                  <Text style={styles.sortTxt}>{sortBy}</Text>
+                  <Ionicons name={showSortMenu ? "chevron-up" : "chevron-down"} size={12} color="#888" />
+                </TouchableOpacity>
+                {/* Dropdown Menu */}
+                {showSortMenu && (
+                  <View style={styles.dropdownMenu}>
+                    {['Popular', 'Newest', 'Duration', 'A-Z'].map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setSortBy(option);
+                          setShowSortMenu(false);
+                        }}
+                      >
+                        <Text style={[styles.dropdownTxt, sortBy === option && styles.dropdownTxtActive]}>{option}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity 
+                style={styles.filterIconBtn}
+                onPress={() => {
+                  HapticService.light();
+                  if (Platform.OS === 'web') {
+                    alert('Advanced filters panel coming soon!');
+                  }
+                }}
+              >
                 <Ionicons name="options-outline" size={16} color="#888" />
               </TouchableOpacity>
             </View>
@@ -412,10 +456,13 @@ const styles = StyleSheet.create({
   },
 
   // ── Filter Chips ──
-  chipsScroll: { marginBottom: 20 },
+  chipsScrollWrapper: {
+    marginBottom: 20,
+    width: '100%',
+  },
+  chipsScroll: {},
   chipsContent: {
     paddingHorizontal: H_PAD,
-    gap: 8,
     alignItems: 'center',
     flexDirection: 'row',
   },
@@ -470,7 +517,7 @@ const styles = StyleSheet.create({
   },
 
   // Sort
-  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 8, zIndex: 10 },
   sortBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -483,6 +530,38 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.06)',
   },
   sortTxt: { fontSize: 12, color: '#A0A0B0', fontWeight: '500' },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 36,
+    right: 0,
+    width: 120,
+    backgroundColor: '#1A1A2A',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+    zIndex: 100,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+  },
+  dropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.03)',
+  },
+  dropdownTxt: {
+    fontSize: 13,
+    color: '#A0A0B0',
+    fontWeight: '500',
+  },
+  dropdownTxtActive: {
+    color: Colors.primary,
+    fontWeight: '700',
+  },
   filterIconBtn: {
     width: 30,
     height: 30,
