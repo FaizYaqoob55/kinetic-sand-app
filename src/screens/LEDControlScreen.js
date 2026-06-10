@@ -30,20 +30,20 @@ const SWATCHES = [
 ];
 
 const EFFECTS = [
-  { id: 'solid',     name: 'Steady',    icon: 'sparkles' },
-  { id: 'breathing', name: 'Breathing', icon: 'water-outline' },
+  { id: 'solid',     name: 'Steady',    icon: 'sparkles-outline' },
+  { id: 'breathing', name: 'Breathing', icon: 'reorder-three-outline' },
   { id: 'pulse',     name: 'Pulse',     icon: 'pulse-outline' },
   { id: 'wave',      name: 'Wave',      icon: 'analytics-outline' },
-  { id: 'rainbow',   name: 'Rainbow',   icon: 'radio-outline' },
-  { id: 'flow',      name: 'Flow',      icon: 'swap-horizontal-outline' },
+  { id: 'rainbow',   name: 'Rainbow',   icon: 'color-filter-outline' },
+  { id: 'flow',      name: 'Flow',      icon: 'reorder-two-outline' },
 ];
 
 const SCENES = [
-  { id: 'warm',     name: 'Warm Relax', icon: 'bonfire',    iconColor: '#FF8C00', r: 255, g: 140, b: 0   },
-  { id: 'focus',    name: 'Focus',      icon: 'disc',       iconColor: '#00BCD4', r: 0,   g: 188, b: 212 },
+  { id: 'warm',     name: 'Warm Relax', icon: 'flame',      iconColor: '#FF8C00', r: 255, g: 140, b: 0   },
+  { id: 'focus',    name: 'Focus',      icon: 'radio-button-on', iconColor: '#00BCD4', r: 0,   g: 188, b: 212 },
   { id: 'energize', name: 'Energize',   icon: 'flash',      iconColor: '#2ECC71', r: 46,  g: 204, b: 113 },
-  { id: 'sleep',    name: 'Sleep',      icon: 'moon',       iconColor: '#7E57C2', r: 126, g: 87,  b: 194 },
-  { id: 'romance',  name: 'Romance',    icon: 'heart',      iconColor: '#E91E8C', r: 233, g: 30,  b: 140 },
+  { id: 'sleep',    name: 'Sleep',      icon: 'moon-outline', iconColor: '#9B59B6', r: 126, g: 87,  b: 194 },
+  { id: 'romance',  name: 'Romance',    icon: 'heart-outline', iconColor: '#E91E63', r: 233, g: 30,  b: 140 },
 ];
 
 // ── BRIGHTNESS SLIDER ────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ export default function LEDControlScreen({ navigation }) {
                 >
                   <Ionicons
                     name={fx.icon}
-                    size={28}
+                    size={22}
                     color={isActive ? '#D4AA70' : '#777777'}
                   />
                   <Text style={[s.effectName, isActive && s.effectNameActive]}>
@@ -304,7 +304,7 @@ export default function LEDControlScreen({ navigation }) {
                 onPress={() => applyScene(scene)}
                 activeOpacity={0.8}
               >
-                <Ionicons name={scene.icon} size={30} color={scene.iconColor} />
+                <Ionicons name={scene.icon} size={28} color={scene.iconColor} />
                 <Text style={s.sceneName}>{scene.name}</Text>
               </TouchableOpacity>
             ))}
@@ -424,30 +424,30 @@ const s = StyleSheet.create({
   swatchRainbow: { overflow: 'hidden' },
 
   // Horizontal scroll
-  hScrollContent: { gap: 12, paddingRight: 4 },
+  hScrollContent: { gap: 8, paddingRight: 4 },
 
-  // Effect cards
+  // Effect cards — compact like reference, all 6 visible
   effectCard: {
-    width: 78, height: 90,
-    backgroundColor: '#222222', borderRadius: 14,
+    width: 60, height: 80,
+    backgroundColor: '#222222', borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#2E2E2E', gap: 10,
+    borderWidth: 1, borderColor: '#2E2E2E', gap: 8,
   },
   effectCardActive: {
     borderWidth: 1.5, borderColor: '#D4AA70',
     backgroundColor: '#1E1A12',
   },
-  effectName: { fontSize: 11, color: '#777777', fontWeight: '500' },
+  effectName: { fontSize: 10, color: '#777777', fontWeight: '500' },
   effectNameActive: { color: '#DDDDDD', fontWeight: '600' },
 
-  // Scene cards
+  // Scene cards — 5 visible, square with big colored icon
   sceneCard: {
-    width: 85, height: 90,
+    width: 74, height: 82,
     backgroundColor: '#222222', borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#2E2E2E', gap: 10,
+    borderWidth: 1, borderColor: '#2E2E2E', gap: 8,
   },
-  sceneName: { fontSize: 11, color: '#AAAAAA', fontWeight: '500' },
+  sceneName: { fontSize: 10, color: '#AAAAAA', fontWeight: '500' },
 
   // Auto Off
   autoOffCard: {
