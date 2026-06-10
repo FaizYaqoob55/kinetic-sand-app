@@ -246,10 +246,11 @@ export default function LEDControlScreen({ navigation }) {
           <BrightnessSlider value={brightness} onRelease={applyBrightness} />
         </View>
 
-        {/* ── EFFECTS ── */}
-        <View style={s.card}>
+
+        {/* ── EFFECTS ── - no card, directly on background like reference */}
+        <View style={s.section}>
           <View style={s.rowBetween}>
-            <Text style={s.cardLabel}>Effects</Text>
+            <Text style={s.sectionHeading}>Effects</Text>
             <TouchableOpacity>
               <Text style={s.goldLink}>View All</Text>
             </TouchableOpacity>
@@ -283,10 +284,11 @@ export default function LEDControlScreen({ navigation }) {
           </ScrollView>
         </View>
 
-        {/* ── QUICK SCENES ── */}
-        <View style={s.card}>
+
+        {/* ── QUICK SCENES ── - no card, directly on background like reference */}
+        <View style={s.section}>
           <View style={s.rowBetween}>
-            <Text style={s.cardLabel}>Quick Scenes</Text>
+            <Text style={s.sectionHeading}>Quick Scenes</Text>
             <TouchableOpacity>
               <Text style={s.goldLink}>Edit</Text>
             </TouchableOpacity>
@@ -415,15 +417,23 @@ const s = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 22,
   },
   swatch: {
-    width: 34, height: 34, borderRadius: 17,
+    width: 28, height: 28, borderRadius: 14,
   },
   swatchActive: {
     borderWidth: 2.5, borderColor: '#FFFFFF',
     shadowColor: '#FFF', shadowOpacity: 0.4, shadowRadius: 4,
+    transform: [{ scale: 1.1 }],
   },
   swatchRainbow: { overflow: 'hidden' },
 
-  // Horizontal scroll
+  // new plain sections (effects / scenes without outer card)
+  section: {
+    marginBottom: 20,
+  },
+  sectionHeading: {
+    fontSize: 16, fontWeight: '600', color: '#FFFFFF',
+    marginBottom: 14,
+  },
   hScrollContent: { gap: 8, paddingRight: 4 },
 
   // Effect cards — compact like reference, all 6 visible
