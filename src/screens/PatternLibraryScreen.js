@@ -1,728 +1,581 @@
-// src/screens/PatternLibraryScreen.js — Exact Reference Match
-import React, { useState, useRef, useCallback } from 'react';
+// src/screens/PatternLibraryScreen.js — Awesome production UI
+import React, { useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, FlatList, Dimensions, Platform, Animated,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  FlatList,
+  ScrollView,
+  Pressable,
+  Dimensions,
+  Platform,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
 import Colors from '../constants/colors';
-import { PATTERNS, formatDuration } from '../constants/patterns';
-import { SandPreview } from '../components/SandPreview';
+import { PATTERNS, PATTERN_CATEGORIES } from '../constants/patterns';
+import {
+  HeroSpotlight,
+  FeaturedPatternCard,
+  GridPatternCard,
+  NowPlayingBanner,
+  StatChip,
+} from '../components/PatternLibraryCard';
 import { toggleFavorite } from '../store/patternSlice';
-import { setPlaying } from '../store/tableSlice';
-import FluidNCService from '../services/FluidNCService';
 import HapticService from '../services/HapticService';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
 const CONTENT_W = isWeb ? Math.min(width, 460) : width;
+const H_PAD = 20;
+const GRID_GAP = 14;
+const GRID_W = (CONTENT_W - H_PAD * 2 - GRID_GAP) / 2;
+const FEAT_W = CONTENT_W * 0.62;
+const FEAT_H = FEAT_W * 1.28;
 
-// Sizing
-const H_PAD = 16;
-const FEAT_CARD_W = (CONTENT_W - H_PAD * 2 - 12) / 2;
-const FEAT_CARD_H = FEAT_CARD_W * 1.3;
-const GRID_GAP = 8;
-const GRID_COLS = 4;
-const GRID_CARD_W = (CONTENT_W - H_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
-const GRID_CARD_H = GRID_CARD_W * 1.1;
-
-// ── Filter chips ────────────────────────────────────────────────────────────────
-const FILTER_CHIPS = [
-  { id: 'all',      label: 'All',      icon: 'apps',           cat: null },
-  { id: 'zen',      label: 'Relax',    icon: 'water-outline',  cat: 'zen' },
-  { id: 'nature',   label: 'Nature',   icon: 'leaf-outline',   cat: 'nature' },
-  { id: 'geo',      label: 'Geometry', icon: 'shapes-outline', cat: 'geometric' },
-  { id: 'zen2',     label: 'Zen',      icon: 'happy-outline',  cat: 'mandala' },
-  { id: 'space',    label: 'Spiritual',icon: 'sparkles-outline', cat: 'space' },
+const SORT_OPTIONS = [
+  { id: 'popular', label: 'Popular' },
+  { id: 'newest', label: 'Newest' },
+  { id: 'duration', label: 'Duration' },
+  { id: 'az', label: 'A → Z' },
 ];
 
-// ── Animated wave bars for "Now Playing" ────────────────────────────────────────
-const WaveBars = () => {
-  const anims = useRef([0.4, 1, 0.6, 0.9, 0.5].map(v => new Animated.Value(v))).current;
-  React.useEffect(() => {
-    anims.forEach((a, i) => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(a, { toValue: 1, duration: 300 + i * 80, useNativeDriver: true }),
-          Animated.timing(a, { toValue: 0.25, duration: 300 + i * 80, useNativeDriver: true }),
-        ])
-      ).start();
-    });
-  }, []);
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-      {anims.map((a, i) => (
-        <Animated.View key={i} style={{
-          width: 2.5, height: 10, borderRadius: 1.5,
-          backgroundColor: Colors.primary,
-          transform: [{ scaleY: a }],
-        }} />
-      ))}
-    </View>
-  );
-};
+const CATEGORY_CHIPS = PATTERN_CATEGORIES.filter(c => c.id !== 'favorites');
 
-// ── Featured Card ───────────────────────────────────────────────────────────────
-const FeaturedCard = ({ pattern, isNowPlaying, isFav, onPress, onFav }) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+function sortPatterns(list, sortId) {
+  const copy = [...list];
+  switch (sortId) {
+    case 'duration':
+      return copy.sort((a, b) => a.duration - b.duration);
+    case 'az':
+      return copy.sort((a, b) => a.name.localeCompare(b.name));
+    case 'newest':
+      return copy.sort((a, b) => (a.isNew === b.isNew ? 0 : a.isNew ? -1 : 1));
+    default:
+      return copy;
+  }
+}
 
-  const onPressIn = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
-  const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
-
-  return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <TouchableOpacity
-        style={[styles.featCard, isNowPlaying && styles.featCardActive]}
-        onPress={onPress}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-        activeOpacity={1}
-      >
-        {/* Sand preview as card background */}
-        <View style={styles.featThumb}>
-          <SandPreview patternId={pattern.id} size={FEAT_CARD_W} />
-        </View>
-
-        {/* Dark gradient overlay */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.9)']}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-
-        {/* Now Playing badge */}
-        {isNowPlaying && (
-          <View style={styles.nowPlayingBadge}>
-            <Text style={styles.nowPlayingTxt}>Now Playing</Text>
-          </View>
-        )}
-
-        {/* Play button */}
-        <View style={styles.featPlayCircle}>
-          <Ionicons name="play" size={16} color="#fff" />
-        </View>
-
-        {/* Bottom info */}
-        <View style={styles.featBottom}>
-          <Text style={styles.featName} numberOfLines={1}>{pattern.name}</Text>
-          <View style={styles.featDurRow}>
-            {isNowPlaying ? (
-              <>
-                <WaveBars />
-                <Text style={styles.featDurActive}> {formatDuration(pattern.duration)}</Text>
-              </>
-            ) : (
-              <Text style={styles.featDur}>{formatDuration(pattern.duration)}</Text>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
-
-// ── Grid Card (small, 4-column) ─────────────────────────────────────────────────
-const GridCard = ({ pattern, isFav, onPress, onFav }) => (
-  <TouchableOpacity style={styles.gridCard} onPress={onPress} activeOpacity={0.82}>
-    {/* Thumbnail */}
-    <View style={styles.gridThumb}>
-      <SandPreview patternId={pattern.id} size={GRID_CARD_W - 4} />
-      {/* Play button overlay */}
-      <View style={styles.gridPlayOverlay}>
-        <View style={styles.gridPlayCircle}>
-          <Ionicons name="play" size={8} color="#fff" />
-        </View>
-      </View>
-    </View>
-
-    {/* Name */}
-    <Text style={styles.gridName} numberOfLines={1}>{pattern.name}</Text>
-
-    {/* Duration + fav row */}
-    <View style={styles.gridMeta}>
-      <Text style={styles.gridDur}>{formatDuration(pattern.duration)}</Text>
-      <TouchableOpacity onPress={onFav} style={styles.gridFavBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-        <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={11} color={isFav ? '#E05A5A' : '#555'} />
-      </TouchableOpacity>
-    </View>
-  </TouchableOpacity>
+const AmbientBackground = () => (
+  <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <LinearGradient colors={['#1A1408', Colors.background, '#050508']} style={StyleSheet.absoluteFill} />
+    <View style={[styles.orb, styles.orbGold]} />
+    <View style={[styles.orb, styles.orbBlue]} />
+    <View style={[styles.orb, styles.orbGreen]} />
+  </View>
 );
 
-// ── Main Screen ─────────────────────────────────────────────────────────────────
 export default function PatternLibraryScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
+  const scrollY = useRef(new Animated.Value(0)).current;
   const { favorites } = useSelector(s => s.pattern);
-  const { isPlaying, currentPattern } = useSelector(s => s.table);
+  const { isPlaying, currentPattern, progress } = useSelector(s => s.table);
+
   const [search, setSearch] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('Popular');
-  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [category, setCategory] = useState('all');
+  const [sortId, setSortId] = useState('popular');
+  const [sortOpen, setSortOpen] = useState(false);
 
-  // Featured = 'featured' category patterns
-  const featuredPatterns = PATTERNS.filter(p => p.category === 'featured');
+  const featured = useMemo(() => PATTERNS.filter(p => p.category === 'featured'), []);
+  const newCount = useMemo(() => PATTERNS.filter(p => p.isNew).length, []);
 
-  // All filtered patterns
-  let filteredPatterns = PATTERNS.filter(p => {
-    const chip = FILTER_CHIPS.find(c => c.id === activeFilter);
-    const catMatch = !chip?.cat || p.category === chip.cat;
-    const searchMatch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    return catMatch && searchMatch;
+  const spotlight = isPlaying && currentPattern
+    ? currentPattern
+    : featured[0] || PATTERNS[0];
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = PATTERNS.filter(p => {
+      const catOk = category === 'all' || category === 'favorites' || p.category === category;
+      const favOk = category !== 'favorites' || favorites.includes(p.id);
+      const searchOk = !q
+        || p.name.toLowerCase().includes(q)
+        || p.description.toLowerCase().includes(q)
+        || p.category.includes(q);
+      return catOk && favOk && searchOk;
+    });
+    return sortPatterns(list, sortId);
+  }, [search, category, sortId, favorites]);
+
+  const compactHeaderOpacity = scrollY.interpolate({
+    inputRange: [100, 160],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
   });
 
-  // Apply Sorting
-  if (sortBy === 'Duration') {
-    filteredPatterns.sort((a, b) => a.duration - b.duration);
-  } else if (sortBy === 'A-Z') {
-    filteredPatterns.sort((a, b) => a.name.localeCompare(b.name));
-  } else if (sortBy === 'Newest') {
-    filteredPatterns.sort((a, b) => (a.isNew === b.isNew ? 0 : a.isNew ? -1 : 1));
-  }
-  // Popular is default, no sort needed or could use favorites count if it existed.
-
-  const handlePatternPress = (pattern) => {
+  const openPattern = (pattern) => {
     HapticService.light();
     navigation.navigate('PatternDetail', { pattern });
   };
 
-  const handleFav = (patternId) => {
-    HapticService.light();
-    dispatch(toggleFavorite(patternId));
+  const openNowPlaying = () => {
+    if (currentPattern) navigation.navigate('NowPlaying');
   };
 
-  // Render 4-column grid row
-  const renderRow = useCallback(({ item, index }) => {
-    const rowItems = filteredPatterns.slice(index * 4, index * 4 + 4);
-    if (index % 4 !== 0 || rowItems.length === 0) return null;
-    return (
-      <View style={styles.gridRow}>
-        {rowItems.map(p => (
-          <GridCard
-            key={p.id}
-            pattern={p}
-            isFav={favorites.includes(p.id)}
-            onPress={() => handlePatternPress(p)}
-            onFav={() => handleFav(p.id)}
+  const toggleFav = (id) => {
+    HapticService.light();
+    dispatch(toggleFavorite(id));
+  };
+
+  const sortLabel = SORT_OPTIONS.find(s => s.id === sortId)?.label || 'Popular';
+
+  const ListHeader = (
+    <View>
+      <View style={styles.pageHeader}>
+        <View>
+          <Text style={styles.eyebrow}>Kinetic Sand Art</Text>
+          <Text style={styles.title}>Patterns</Text>
+        </View>
+        <Pressable style={styles.shuffleBtn} onPress={() => {
+          HapticService.light();
+          const random = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
+          openPattern(random);
+        }}>
+          <Ionicons name="shuffle" size={18} color={Colors.primary} />
+        </Pressable>
+      </View>
+
+      <HeroSpotlight
+        pattern={spotlight}
+        isPlaying={isPlaying && currentPattern?.id === spotlight.id}
+        onPress={() => openPattern(spotlight)}
+        onPlay={() => openPattern(spotlight)}
+      />
+
+      <View style={styles.statsRow}>
+        <StatChip
+          icon="grid-outline"
+          value={PATTERNS.length}
+          label="Total"
+          active={category === 'all'}
+          onPress={() => { HapticService.light(); setCategory('all'); }}
+        />
+        <StatChip
+          icon="sparkles-outline"
+          value={newCount}
+          label="New"
+          active={category === 'featured'}
+          onPress={() => { HapticService.light(); setCategory('featured'); }}
+        />
+        <StatChip
+          icon="heart"
+          value={favorites.length}
+          label="Saved"
+          active={category === 'favorites'}
+          onPress={() => { HapticService.light(); setCategory('favorites'); }}
+        />
+      </View>
+
+      <View style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
+        <Ionicons name="search" size={18} color={searchFocused ? Colors.primary : Colors.textTertiary} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search patterns, moods, styles..."
+          placeholderTextColor={Colors.textTertiary}
+          value={search}
+          onChangeText={setSearch}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
+          returnKeyType="search"
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color={Colors.textTertiary} />
+          </Pressable>
+        )}
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chips}
+      >
+        {CATEGORY_CHIPS.map(chip => {
+          const active = category === chip.id;
+          return (
+            <Pressable
+              key={chip.id}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => { HapticService.light(); setCategory(chip.id); }}
+            >
+              <Ionicons name={chip.icon} size={14} color={active ? '#1A1208' : Colors.primary} />
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{chip.name}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {isPlaying && currentPattern && (
+        <NowPlayingBanner
+          pattern={currentPattern}
+          progress={progress || 35}
+          onPress={openNowPlaying}
+        />
+      )}
+
+      <View style={styles.sectionRow}>
+        <View>
+          <Text style={styles.sectionTitle}>Curated Picks</Text>
+          <Text style={styles.sectionHint}>Swipe to explore highlights</Text>
+        </View>
+        <View style={styles.sectionIcon}>
+          <Ionicons name="star" size={14} color={Colors.primary} />
+        </View>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.featuredRow}
+        decelerationRate="fast"
+        snapToInterval={FEAT_W + 14}
+      >
+        {featured.map(pattern => (
+          <FeaturedPatternCard
+            key={pattern.id}
+            pattern={pattern}
+            width={FEAT_W}
+            height={FEAT_H}
+            isActive={currentPattern?.id === pattern.id}
+            isPlaying={isPlaying && currentPattern?.id === pattern.id}
+            onPress={() => openPattern(pattern)}
           />
         ))}
-        {/* Fill empty cells */}
-        {rowItems.length < 4 && Array.from({ length: 4 - rowItems.length }).map((_, i) => (
-          <View key={`empty-${i}`} style={{ width: GRID_CARD_W }} />
-        ))}
-      </View>
-    );
-  }, [filteredPatterns, favorites]);
+      </ScrollView>
 
-  // Build rows array
-  const rows = [];
-  for (let i = 0; i < filteredPatterns.length; i += 4) {
-    rows.push({ id: `row-${i}`, startIndex: i });
-  }
+      <View style={styles.divider}>
+        <LinearGradient
+          colors={['transparent', Colors.primary, 'transparent']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.dividerLine}
+        />
+      </View>
+
+      <View style={styles.toolbar}>
+        <View>
+          <Text style={styles.sectionTitle}>Browse All</Text>
+          <Text style={styles.resultCount}>
+            {filtered.length} pattern{filtered.length === 1 ? '' : 's'}
+            {category !== 'all' && category !== 'favorites'
+              ? ` · ${CATEGORY_CHIPS.find(c => c.id === category)?.name}`
+              : category === 'favorites' ? ' · Saved' : ''}
+          </Text>
+        </View>
+        <Pressable
+          style={styles.sortBtn}
+          onPress={() => { HapticService.light(); setSortOpen(v => !v); }}
+        >
+          <Ionicons name="funnel-outline" size={14} color={Colors.primary} />
+          <Text style={styles.sortBtnText}>{sortLabel}</Text>
+          <Ionicons name="chevron-down" size={12} color={Colors.primary} />
+        </Pressable>
+      </View>
+
+      {sortOpen && (
+        <View style={styles.sortMenuInline}>
+          {SORT_OPTIONS.map(opt => (
+            <Pressable
+              key={opt.id}
+              style={[styles.sortItem, sortId === opt.id && styles.sortItemActive]}
+              onPress={() => { HapticService.light(); setSortId(opt.id); setSortOpen(false); }}
+            >
+              <Text style={[styles.sortItemText, sortId === opt.id && styles.sortItemTextActive]}>
+                {opt.label}
+              </Text>
+              {sortId === opt.id && <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />}
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={['#0A0A10', '#080810']} style={StyleSheet.absoluteFill} />
+      <AmbientBackground />
 
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+      <Animated.View
+        style={[
+          styles.compactHeader,
+          {
+            paddingTop: insets.top + 6,
+            opacity: compactHeaderOpacity,
+            transform: [{
+              translateY: compactHeaderOpacity.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-12, 0],
+              }),
+            }],
+          },
+        ]}
+        pointerEvents="none"
       >
-        {/* ── HEADER ── */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            onPress={() => { HapticService.light(); navigation.goBack(); }}
-          >
-            <Ionicons name="chevron-back" size={22} color="#D0D0D0" />
-          </TouchableOpacity>
+        <Text style={styles.compactTitle}>Patterns</Text>
+        <Text style={styles.compactCount}>{filtered.length} designs</Text>
+      </Animated.View>
 
-          <Text style={styles.headerTitle}>Patterns</Text>
-
-          <TouchableOpacity style={styles.headerIconBtn}>
-            <Ionicons name="search" size={20} color="#D0D0D0" />
-          </TouchableOpacity>
-        </View>
-
-        {/* ── SEARCH BAR ── */}
-        <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={16} color="#555" style={{ marginRight: 8 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search patterns, moods, or keywords..."
-            placeholderTextColor="#555"
-            value={search}
-            onChangeText={setSearch}
+      <Animated.FlatList
+        data={filtered}
+        keyExtractor={item => item.id}
+        numColumns={2}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+        contentContainerStyle={[
+          styles.list,
+          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 120 },
+        ]}
+        columnWrapperStyle={styles.gridRow}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={(
+          <View style={styles.empty}>
+            <LinearGradient colors={Colors.gradientPrimary} style={styles.emptyIcon}>
+              <Ionicons name="search" size={26} color="#1A1208" />
+            </LinearGradient>
+            <Text style={styles.emptyTitle}>Nothing here yet</Text>
+            <Text style={styles.emptyBody}>
+              Adjust your search or pick a different category to discover sand art.
+            </Text>
+            <Pressable
+              style={styles.emptyBtn}
+              onPress={() => { setSearch(''); setCategory('all'); }}
+            >
+              <Text style={styles.emptyBtnText}>Show all patterns</Text>
+            </Pressable>
+          </View>
+        )}
+        renderItem={({ item }) => (
+          <GridPatternCard
+            pattern={item}
+            width={GRID_W}
+            isFavorite={favorites.includes(item.id)}
+            isPlaying={isPlaying && currentPattern?.id === item.id}
+            onPress={() => openPattern(item)}
+            onToggleFavorite={() => toggleFav(item.id)}
           />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={16} color="#555" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* ── FILTER CHIPS ── */}
-        <View style={styles.chipsScrollWrapper}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipsScroll}
-            contentContainerStyle={styles.chipsContent}
-          >
-            {FILTER_CHIPS.map((chip, index) => {
-              const active = activeFilter === chip.id;
-              const isLast = index === FILTER_CHIPS.length - 1;
-              return (
-                <TouchableOpacity
-                  key={chip.id}
-                  style={[styles.chip, active && styles.chipActive, { marginRight: isLast ? 0 : 8 }]}
-                  onPress={() => { HapticService.light(); setActiveFilter(chip.id); }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name={chip.icon}
-                    size={13}
-                    color={active ? '#0A0A10' : '#888'}
-                  />
-                  <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>
-                    {chip.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* ── FEATURED SECTION ── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAll}>View All</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.featScroll}
-          >
-            {featuredPatterns.map(p => (
-              <FeaturedCard
-                key={p.id}
-                pattern={p}
-                isNowPlaying={isPlaying && currentPattern?.id === p.id}
-                isFav={favorites.includes(p.id)}
-                onPress={() => handlePatternPress(p)}
-                onFav={() => handleFav(p.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* ── ALL PATTERNS SECTION ── */}
-        <View style={styles.section}>
-          {/* Header row */}
-          <View style={[styles.sectionHeader, { zIndex: 10 }]}>
-            <View>
-              <Text style={styles.sectionTitle}>All Patterns</Text>
-              <Text style={styles.patternCount}>{filteredPatterns.length} Patterns</Text>
-            </View>
-            <View style={styles.sortRow}>
-              <View style={{ position: 'relative' }}>
-                <TouchableOpacity 
-                  style={styles.sortBtn} 
-                  onPress={() => setShowSortMenu(!showSortMenu)}
-                >
-                  <Text style={styles.sortTxt}>{sortBy}</Text>
-                  <Ionicons name={showSortMenu ? "chevron-up" : "chevron-down"} size={12} color="#888" />
-                </TouchableOpacity>
-                {/* Dropdown Menu */}
-                {showSortMenu && (
-                  <View style={styles.dropdownMenu}>
-                    {['Popular', 'Newest', 'Duration', 'A-Z'].map((option) => (
-                      <TouchableOpacity
-                        key={option}
-                        style={styles.dropdownItem}
-                        onPress={() => {
-                          setSortBy(option);
-                          setShowSortMenu(false);
-                        }}
-                      >
-                        <Text style={[styles.dropdownTxt, sortBy === option && styles.dropdownTxtActive]}>{option}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-              <TouchableOpacity 
-                style={styles.filterIconBtn}
-                onPress={() => {
-                  HapticService.light();
-                  if (Platform.OS === 'web') {
-                    alert('Advanced filters panel coming soon!');
-                  }
-                }}
-              >
-                <Ionicons name="options-outline" size={16} color="#888" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* 4-column grid */}
-          {rows.map(row => {
-            const rowItems = filteredPatterns.slice(row.startIndex, row.startIndex + 4);
-            return (
-              <View key={row.id} style={styles.gridRow}>
-                {rowItems.map(p => (
-                  <GridCard
-                    key={p.id}
-                    pattern={p}
-                    isFav={favorites.includes(p.id)}
-                    onPress={() => handlePatternPress(p)}
-                    onFav={() => handleFav(p.id)}
-                  />
-                ))}
-                {rowItems.length < 4 && Array.from({ length: 4 - rowItems.length }).map((_, i) => (
-                  <View key={`empty-${i}`} style={{ width: GRID_CARD_W }} />
-                ))}
-              </View>
-            );
-          })}
-
-          {filteredPatterns.length === 0 && (
-            <View style={styles.emptyState}>
-              <Ionicons name="search-outline" size={40} color="#2A2A3A" />
-              <Text style={styles.emptyTxt}>No patterns found</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={{ height: 120 }} />
-      </ScrollView>
+        )}
+      />
     </View>
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A10' },
-  scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 40 },
+  root: { flex: 1, backgroundColor: Colors.background },
 
-  // ── Header ──
-  header: {
+  orb: { position: 'absolute', borderRadius: 999 },
+  orbGold: {
+    width: 280, height: 280, top: -80, right: -100,
+    backgroundColor: 'rgba(201,168,76,0.08)',
+  },
+  orbBlue: {
+    width: 200, height: 200, top: 320, left: -80,
+    backgroundColor: 'rgba(76,158,255,0.05)',
+  },
+  orbGreen: {
+    width: 160, height: 160, bottom: 200, right: -40,
+    backgroundColor: 'rgba(76,175,130,0.05)',
+  },
+
+  compactHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 54,
     paddingHorizontal: H_PAD,
-    paddingBottom: 14,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(10,10,15,0.92)',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  headerTitle: {
-    fontSize: 20,
+  compactTitle: { fontSize: 17, fontWeight: '700', color: Colors.textPrimary },
+  compactCount: { fontSize: 12, color: Colors.textTertiary, fontWeight: '500' },
+
+  list: { paddingHorizontal: H_PAD },
+  gridRow: { gap: GRID_GAP },
+
+  pageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 18,
+  },
+  eyebrow: {
+    fontSize: 11,
     fontWeight: '700',
-    color: '#F0F0F0',
-    letterSpacing: 0.2,
+    color: Colors.primary,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 4,
   },
-  headerIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+  title: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    letterSpacing: -0.8,
+  },
+  shuffleBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.primaryGlow,
+    borderWidth: 1,
+    borderColor: 'rgba(201,168,76,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  // ── Search ──
-  searchBar: {
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 18,
+  },
+
+  searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: H_PAD,
-    marginBottom: 14,
-    backgroundColor: '#131320',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    gap: 10,
+    backgroundColor: 'rgba(22,22,31,0.85)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 15 : 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: Colors.border,
+    marginBottom: 16,
+  },
+  searchWrapFocused: {
+    borderColor: 'rgba(201,168,76,0.45)',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
   },
   searchInput: {
     flex: 1,
-    color: '#C0C0C0',
-    fontSize: 13,
+    fontSize: 15,
+    color: Colors.textPrimary,
     paddingVertical: 0,
   },
 
-  // ── Filter Chips ──
-  chipsScrollWrapper: {
-    marginBottom: 20,
-    width: '100%',
-  },
-  chipsScroll: {},
-  chipsContent: {
-    paddingHorizontal: H_PAD,
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
+  chips: { gap: 8, paddingBottom: 20 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#131320',
+    paddingVertical: 9,
+    borderRadius: 22,
+    backgroundColor: 'rgba(22,22,31,0.7)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(201,168,76,0.25)',
   },
   chipActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  chipTxt: {
-    fontSize: 12,
-    color: '#777',
-    fontWeight: '500',
-  },
-  chipTxtActive: {
-    color: '#0A0A10',
-    fontWeight: '700',
-  },
+  chipText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  chipTextActive: { color: '#1A1208' },
 
-  // ── Section ──
-  section: { paddingHorizontal: H_PAD, marginBottom: 24 },
-  sectionHeader: {
+  sectionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
+  sectionHint: { marginTop: 3, fontSize: 12, color: Colors.textTertiary },
+  sectionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.primaryGlow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featuredRow: { paddingRight: H_PAD, marginBottom: 8 },
+
+  divider: { alignItems: 'center', marginVertical: 20 },
+  dividerLine: { width: '60%', height: 1, opacity: 0.35 },
+
+  toolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 14,
   },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#F0F0F0',
-  },
-  viewAll: {
-    fontSize: 13,
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  patternCount: {
-    fontSize: 11,
-    color: '#555',
-    fontWeight: '400',
-    marginTop: 2,
-  },
-
-  // Sort
-  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 8, zIndex: 10 },
+  resultCount: { marginTop: 3, fontSize: 12, color: Colors.textTertiary },
   sortBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#131320',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  sortTxt: { fontSize: 12, color: '#A0A0B0', fontWeight: '500' },
-  dropdownMenu: {
-    position: 'absolute',
-    top: 36,
-    right: 0,
-    width: 120,
-    backgroundColor: '#1A1A2A',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    overflow: 'hidden',
-    zIndex: 100,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-  },
-  dropdownItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
-  },
-  dropdownTxt: {
-    fontSize: 13,
-    color: '#A0A0B0',
-    fontWeight: '500',
-  },
-  dropdownTxtActive: {
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  filterIconBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: '#131320',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-
-  // ── Featured Cards ──
-  featScroll: { gap: 12, paddingRight: 4 },
-  featCard: {
-    width: FEAT_CARD_W,
-    height: FEAT_CARD_H,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#131320',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    justifyContent: 'flex-end',
-  },
-  featCardActive: {
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  featThumb: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.85,
-  },
-  nowPlayingBadge: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    zIndex: 5,
-  },
-  nowPlayingTxt: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#0A0A10',
-    letterSpacing: 0.3,
-  },
-  featPlayCircle: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: '38%',
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingLeft: 2,
-    zIndex: 4,
-  },
-  featBottom: {
+    gap: 6,
     paddingHorizontal: 12,
-    paddingBottom: 12,
-    zIndex: 3,
-  },
-  featName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  featDurRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  featDur: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '500',
-  },
-  featDurActive: {
-    fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-
-  // ── Grid (4-column) ──
-  gridRow: {
-    flexDirection: 'row',
-    gap: GRID_GAP,
-    marginBottom: GRID_GAP,
-  },
-  gridCard: {
-    width: GRID_CARD_W,
-  },
-  gridThumb: {
-    width: GRID_CARD_W,
-    height: GRID_CARD_H,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#131320',
-    marginBottom: 5,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(22,22,31,0.85)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: Colors.border,
   },
-  gridPlayOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
+  sortBtnText: { fontSize: 13, fontWeight: '600', color: Colors.primary },
+  sortMenuInline: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
   },
-  gridPlayCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingLeft: 2,
-  },
-  gridName: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#C0C0C0',
-    marginBottom: 2,
-    numberOfLines: 1,
-  },
-  gridMeta: {
+  sortItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.backgroundCard,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  gridDur: {
-    fontSize: 10,
-    color: Colors.primary,
-    fontWeight: '500',
+  sortItemActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryGlow,
   },
-  gridFavBtn: {
-    padding: 2,
-  },
+  sortItemText: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
+  sortItemTextActive: { color: Colors.primary },
 
-  // ── Empty ──
-  emptyState: {
+  empty: { alignItems: 'center', paddingTop: 36, paddingBottom: 60, paddingHorizontal: 24 },
+  emptyIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     alignItems: 'center',
-    paddingTop: 50,
-    gap: 12,
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  emptyTxt: {
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary, marginBottom: 8 },
+  emptyBody: {
     fontSize: 14,
-    color: '#3A3A5A',
-    fontWeight: '500',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 22,
   },
+  emptyBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: Colors.primary,
+  },
+  emptyBtnText: { fontSize: 14, fontWeight: '700', color: '#1A1208' },
 });
