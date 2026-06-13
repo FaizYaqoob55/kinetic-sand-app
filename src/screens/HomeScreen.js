@@ -8,8 +8,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
 import { SandPreview } from '../components/SandPreview';
-import Colors from '../constants/colors';
-import { PATTERNS, formatDuration } from '../constants/patterns';
+import { RemotePatternPreview } from '../components/RemotePatternPreview';
+import { formatDuration } from '../constants/patterns';
 import FluidNCService from '../services/FluidNCService';
 import WebSocketService from '../services/WebSocketService';
 import {
@@ -19,7 +19,14 @@ import {
 import HapticService from '../services/HapticService';
 
 const { width } = Dimensions.get('window');
-const SLIDER_W = width - 24 * 2 - 20;
+
+// Reference palette — warm amber on pure black
+const AMBER = '#F0A030';
+const AMBER_BRIGHT = '#FFB84D';
+const AMBER_DARK = '#C07A20';
+const AMBER_MUTED = '#B8864A';
+const TEXT_MUTED = '#9A8070';
+const BG = '#000000';
 
 // ── GREETING ──
 const getGreeting = () => {
@@ -29,18 +36,14 @@ const getGreeting = () => {
   return { text: 'Good Evening', emoji: '👋' };
 };
 
-// ── SIMPLE SLIDER (Responsive & Flexible) ──
-const MiniSlider = ({ value, max, color, onRelease }) => {
+// ── SLIDER (reference: thin track, amber thumb + glow) ──
+const MiniSlider = ({ value, max, onRelease }) => {
   const [localVal, setLocalVal] = useState(value);
   const trackW = useRef(1);
   const valRef = useRef(value);
-  // Keep the latest onRelease callback
   const onReleaseRef = useRef(onRelease);
 
-  useEffect(() => {
-    onReleaseRef.current = onRelease;
-  }, [onRelease]);
-
+  useEffect(() => { onReleaseRef.current = onRelease; }, [onRelease]);
   useEffect(() => {
     setLocalVal(value);
     valRef.current = value;
@@ -69,31 +72,50 @@ const MiniSlider = ({ value, max, color, onRelease }) => {
 
   return (
     <View style={miniSlider.container}>
-      <View 
-        style={miniSlider.track} 
+      <View
+        style={miniSlider.track}
         onLayout={(e) => { trackW.current = e.nativeEvent.layout.width || 1; }}
         {...pan.panHandlers}
       >
-        <View style={[miniSlider.fill, { width: `${pct}%`, backgroundColor: color }]} />
-        <View style={[miniSlider.thumb, { left: `${pct}%`, borderColor: color }]} />
+        <View style={miniSlider.trackBg} />
+        <View style={[miniSlider.fillWrap, { width: `${pct}%` }]}>
+          <LinearGradient
+            colors={[AMBER_DARK, AMBER, AMBER_BRIGHT]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={miniSlider.fill}
+          />
+        </View>
+        <View style={[miniSlider.thumbGlow, { left: `${pct}%` }]} />
+        <View style={[miniSlider.thumb, { left: `${pct}%` }]} />
       </View>
     </View>
   );
 };
 
 const miniSlider = StyleSheet.create({
-  container: { width: '100%', paddingVertical: 6 },
-  track: {
-    height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    position: 'relative',
+  container: { width: '100%', paddingVertical: 8 },
+  track: { height: 14, justifyContent: 'center', position: 'relative' },
+  trackBg: {
+    height: 3, borderRadius: 2, backgroundColor: '#2A2520',
+    position: 'absolute', left: 0, right: 0, top: 5.5,
   },
-  fill: { height: 4, borderRadius: 2, position: 'absolute', top: 0, left: 0 },
+  fillWrap: { position: 'absolute', left: 0, top: 5.5, height: 3, borderRadius: 2, overflow: 'hidden' },
+  fill: { flex: 1, height: 3, borderRadius: 2 },
+  thumbGlow: {
+    position: 'absolute', top: 0, marginLeft: -11,
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: 'rgba(240,160,48,0.22)',
+  },
   thumb: {
-    position: 'absolute', top: -7, marginLeft: -9,
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: '#1A1A26',
-    borderWidth: 2,
+    position: 'absolute', top: 3, marginLeft: -7,
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: AMBER_BRIGHT,
+    shadowColor: AMBER,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });
 
@@ -112,7 +134,7 @@ const WaveBar = ({ delay }) => {
   return (
     <Animated.View style={{
       width: 2.5, height: 14, borderRadius: 2,
-      backgroundColor: Colors.primary,
+      backgroundColor: AMBER,
       marginHorizontal: 1.5,
       transform: [{ scaleY: anim }],
     }} />
@@ -127,8 +149,9 @@ export default function HomeScreen({ navigation }) {
     currentPattern, progress, ledColor, ledBrightness,
     tableName, speed,
   } = useSelector(s => s.table);
+  const { patterns } = useSelector(s => s.pattern);
 
-  const recommendedPatterns = PATTERNS.slice(0, 6);
+  const recommendedPatterns = patterns.slice(0, 6);
   const { text: greetText, emoji: greetEmoji } = getGreeting();
   const ledStr = `rgb(${ledColor.r},${ledColor.g},${ledColor.b})`;
 
@@ -169,8 +192,6 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={['#080808', '#0D0D12']} style={StyleSheet.absoluteFill} />
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
@@ -188,7 +209,7 @@ export default function HomeScreen({ navigation }) {
               style={styles.headerIconBtn}
               onPress={() => { HapticService.light(); }}
             >
-              <Ionicons name="notifications-outline" size={20} color={Colors.textSecondary} />
+              <Ionicons name="notifications-outline" size={20} color={TEXT_MUTED} />
               {/* Notification dot */}
               <View style={styles.notifDot} />
             </TouchableOpacity>
@@ -196,7 +217,7 @@ export default function HomeScreen({ navigation }) {
               style={styles.headerIconBtn}
               onPress={() => { HapticService.light(); navigation.navigate('Settings'); }}
             >
-              <Ionicons name="settings-outline" size={20} color={Colors.textSecondary} />
+              <Ionicons name="settings-outline" size={20} color={TEXT_MUTED} />
             </TouchableOpacity>
           </View>
         </View>
@@ -245,7 +266,11 @@ export default function HomeScreen({ navigation }) {
             {/* Pattern thumbnail */}
             <View style={styles.playerThumb}>
               {currentPattern ? (
-                <SandPreview patternId={currentPattern.id} size={42} />
+                {currentPattern?.isRemote ? (
+                  <RemotePatternPreview pattern={currentPattern} size={42} />
+                ) : (
+                  <SandPreview patternId={currentPattern.id} size={42} />
+                )}
               ) : (
                 <Image
                   source={require('../assets/pattern_waves.png')}
@@ -270,7 +295,7 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.playerStatusText}> Playing</Text>
                   </>
                 ) : (
-                  <Text style={[styles.playerStatusText, { color: Colors.textTertiary }]}>
+                  <Text style={[styles.playerStatusText, { color: TEXT_MUTED }]}>
                     {isPaused ? 'Paused' : 'Tap play to start'}
                   </Text>
                 )}
@@ -283,8 +308,8 @@ export default function HomeScreen({ navigation }) {
                 style={styles.controlSmall}
                 onPress={() => {
                   HapticService.light();
-                  const idx = PATTERNS.findIndex(p => p.id === currentPattern?.id);
-                  if (idx > 0) navigation.navigate('PatternDetail', { pattern: PATTERNS[idx - 1] });
+                  const idx = patterns.findIndex(p => p.id === currentPattern?.id);
+                  if (idx > 0) navigation.navigate('PatternDetail', { pattern: patterns[idx - 1] });
                 }}
               >
                 <Ionicons name="play-skip-back" size={18} color="rgba(255,255,255,0.7)" />
@@ -310,8 +335,8 @@ export default function HomeScreen({ navigation }) {
                 style={styles.controlSmall}
                 onPress={() => {
                   HapticService.light();
-                  const idx = PATTERNS.findIndex(p => p.id === currentPattern?.id);
-                  const next = PATTERNS[(idx + 1) % PATTERNS.length];
+                  const idx = patterns.findIndex(p => p.id === currentPattern?.id);
+                  const next = patterns[(idx + 1) % patterns.length];
                   navigation.navigate('PatternDetail', { pattern: next });
                 }}
               >
@@ -326,14 +351,13 @@ export default function HomeScreen({ navigation }) {
           {/* Speed */}
           <View style={styles.adjustItem}>
             <View style={styles.adjustHeader}>
-              <Ionicons name="speedometer-outline" size={14} color={Colors.textSecondary} />
+              <Ionicons name="speedometer-outline" size={14} color={TEXT_MUTED} />
               <Text style={styles.adjustLabel}>Speed</Text>
             </View>
             <Text style={styles.adjustValue}>{speed}%</Text>
             <MiniSlider
               value={speed}
               max={100}
-              color={Colors.primary}
               onRelease={handleSpeedChange}
             />
           </View>
@@ -343,14 +367,13 @@ export default function HomeScreen({ navigation }) {
           {/* Brightness */}
           <View style={styles.adjustItem}>
             <View style={styles.adjustHeader}>
-              <Ionicons name="sunny-outline" size={14} color={Colors.textSecondary} />
+              <Ionicons name="sunny-outline" size={14} color={TEXT_MUTED} />
               <Text style={styles.adjustLabel}>Brightness</Text>
             </View>
             <Text style={styles.adjustValue}>{Math.round((ledBrightness / 255) * 100)}%</Text>
             <MiniSlider
               value={ledBrightness}
               max={255}
-              color="#E0C070"
               onRelease={handleBrightnessChange}
             />
           </View>
@@ -360,10 +383,10 @@ export default function HomeScreen({ navigation }) {
           {/* Ambient */}
           <TouchableOpacity
             style={styles.adjustItem}
-            onPress={() => { HapticService.light(); navigation.navigate('LEDControl'); }}
+            onPress={() => { HapticService.light(); navigation.navigate('LEDControlTab'); }}
           >
             <View style={styles.adjustHeader}>
-              <Ionicons name="color-palette-outline" size={14} color={Colors.textSecondary} />
+              <Ionicons name="color-palette-outline" size={14} color={TEXT_MUTED} />
               <Text style={styles.adjustLabel}>Ambient</Text>
             </View>
             <View style={styles.ambientRow}>
@@ -394,7 +417,6 @@ export default function HomeScreen({ navigation }) {
               {
                 icon: 'play',
                 label: isPlaying ? 'Pause' : 'Play / Pause',
-                accent: Colors.primary,
                 onPress: isPlaying || isPaused
                   ? handlePauseResume
                   : () => navigation.navigate('Library'),
@@ -402,30 +424,27 @@ export default function HomeScreen({ navigation }) {
               {
                 icon: 'star-outline',
                 label: 'Favorites',
-                accent: '#C9A84C',
                 onPress: () => navigation.navigate('Library'),
               },
               {
                 icon: 'moon-outline',
                 label: 'Sleep Timer',
-                accent: '#5C9BFF',
-                onPress: () => navigation.navigate('Schedule'),
+                onPress: () => navigation.navigate('ScheduleTab'),
               },
               {
                 icon: 'sunny-outline',
                 label: 'Lighting',
-                accent: '#FF9F45',
-                onPress: () => navigation.navigate('LEDControl'),
+                onPress: () => navigation.navigate('LEDControlTab'),
               },
-            ].map(a => (
+            ].map((a) => (
               <TouchableOpacity
                 key={a.label}
                 style={styles.quickCard}
                 onPress={() => { HapticService.light(); a.onPress(); }}
                 activeOpacity={0.7}
               >
-                <View style={[styles.quickIconWrap, { backgroundColor: a.accent + '14' }]}>
-                  <Ionicons name={a.icon} size={22} color={a.accent} />
+                <View style={styles.quickIconWrap}>
+                  <Ionicons name={a.icon} size={22} color={AMBER_MUTED} />
                 </View>
                 <Text style={styles.quickLabel}>{a.label}</Text>
               </TouchableOpacity>
@@ -486,9 +505,9 @@ export default function HomeScreen({ navigation }) {
             style={styles.connectBanner}
             onPress={() => { HapticService.medium(); navigation.navigate('Connect'); }}
           >
-            <Ionicons name="wifi-outline" size={16} color="#F0A500" />
+            <Ionicons name="wifi-outline" size={16} color={AMBER} />
             <Text style={styles.connectBannerText}>Tap to connect your SandTable</Text>
-            <Ionicons name="chevron-forward" size={14} color="#F0A500" />
+            <Ionicons name="chevron-forward" size={14} color={AMBER} />
           </TouchableOpacity>
         )}
 
@@ -499,7 +518,7 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#080808' },
+  root: { flex: 1, backgroundColor: BG },
   scrollView: {
     flex: 1,
     width: '100%',
@@ -523,20 +542,20 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: TEXT_MUTED,
     marginBottom: 2,
   },
   welcomeText: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    letterSpacing: 0.2,
-    marginBottom: 3,
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    marginBottom: 4,
   },
   tagline: {
     fontSize: 13,
-    color: Colors.primary,
-    fontWeight: '500',
+    color: AMBER_MUTED,
+    fontWeight: '400',
   },
   headerIcons: {
     flexDirection: 'row',
@@ -547,12 +566,12 @@ const styles = StyleSheet.create({
   headerIconBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#141420',
+    borderRadius: 12,
+    backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#2A2A2A',
   },
   notifDot: {
     position: 'absolute',
@@ -561,9 +580,9 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: Colors.primary,
+    backgroundColor: AMBER,
     borderWidth: 1.5,
-    borderColor: '#141420',
+    borderColor: '#111',
   },
 
   // ── HERO CARD ──
@@ -647,12 +666,12 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(20,16,8,0.95)',
+    backgroundColor: 'rgba(13,13,13,0.95)',
     paddingHorizontal: 12,
     paddingVertical: 12,
     gap: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
+    borderTopColor: '#1A1A1A',
   },
   playerThumb: {
     width: 44,
@@ -666,9 +685,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   playerName: {
-    color: Colors.textPrimary,
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 4,
   },
   playerStatusRow: {
@@ -676,7 +695,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   playerStatusText: {
-    color: Colors.primary,
+    color: AMBER,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -696,13 +715,13 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: Colors.primary,
+    backgroundColor: AMBER,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    shadowColor: AMBER,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
     elevation: 6,
   },
   controlPlayInner: {
@@ -717,12 +736,12 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     marginBottom: 22,
-    backgroundColor: '#131318',
-    borderRadius: 18,
+    backgroundColor: '#0D0D0D',
+    borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#1E1E1E',
   },
   adjustItem: {
     flex: 1,
@@ -731,25 +750,25 @@ const styles = StyleSheet.create({
   },
   adjustDivider: {
     width: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#1A1A1A',
     marginVertical: 4,
   },
   adjustHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
+    gap: 5,
+    marginBottom: 4,
   },
   adjustLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
+    fontSize: 11,
+    color: TEXT_MUTED,
     fontWeight: '500',
   },
   adjustValue: {
     fontSize: 14,
-    color: Colors.textPrimary,
+    color: '#FFFFFF',
     fontWeight: '600',
-    marginBottom: 6,
+    marginBottom: 2,
   },
   ambientRow: {
     flexDirection: 'row',
@@ -757,13 +776,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ambientOrb: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: '#C9A84C',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.6,
+    shadowColor: AMBER,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
     shadowRadius: 6,
     elevation: 4,
     marginBottom: 6,
@@ -782,12 +801,12 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    color: Colors.textPrimary,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   seeAll: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: TEXT_MUTED,
     fontWeight: '500',
   },
   quickGrid: {
@@ -797,40 +816,30 @@ const styles = StyleSheet.create({
   quickCard: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: '#131318',
+    backgroundColor: '#0D0D0D',
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: '#1E1E1E',
     gap: 8,
   },
   quickIconWrap: {
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(240,160,48,0.06)',
   },
   quickLabel: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: '600',
+    fontSize: 10,
+    color: AMBER_MUTED,
+    fontWeight: '500',
     textAlign: 'center',
   },
 
-  // ── RECOMMENDED ──
-  hScroll: Platform.select({
-    web: {
-      // On web, avoid negative margin which causes overflow
-      paddingLeft: 0,
-    },
-    default: {
-      marginHorizontal: -16,
-      paddingHorizontal: 16,
-    },
-  }),
   // ── RECOMMENDED ──
   hScroll: Platform.select({
     web: { paddingLeft: 0 },
@@ -873,7 +882,7 @@ const styles = StyleSheet.create({
   },
   recDur: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.65)',
+    color: AMBER_MUTED,
   },
 
   // ── CONNECT BANNER ──
@@ -882,15 +891,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginBottom: 10,
-    backgroundColor: 'rgba(240,165,0,0.07)',
+    backgroundColor: 'rgba(240,160,48,0.07)',
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(240,165,0,0.2)',
+    borderColor: 'rgba(240,160,48,0.2)',
   },
   connectBannerText: {
     flex: 1,
-    color: '#F0A500',
+    color: AMBER,
     fontSize: 13,
     fontWeight: '500',
   },

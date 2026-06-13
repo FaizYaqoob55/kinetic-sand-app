@@ -14,20 +14,30 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { SandPreview } from './SandPreview';
-import Colors from '../constants/colors';
+import { RemotePatternPreview } from './RemotePatternPreview';
 import { getDifficultyColor, formatDuration } from '../constants/patterns';
 
+const AMBER = '#F0A030';
+const AMBER_BRIGHT = '#FFB84D';
+const AMBER_DARK = '#C07A20';
+const AMBER_MUTED = '#B8864A';
+const TEXT_MUTED = '#9A8070';
+const CARD = '#0D0D0D';
+const CARD_BORDER = '#1E1E1E';
+const AMBER_GRAD = ['#FFB84D', AMBER, AMBER_DARK];
+const AMBER_GLOW = 'rgba(240,160,48,0.12)';
+
 const CATEGORY_PALETTE = {
-  featured:  { bg: ['#221C12', '#100E0A'], glow: 'rgba(201,168,76,0.38)', accent: '#C9A84C' },
-  geometric: { bg: ['#121A28', '#080C14'], glow: 'rgba(76,158,255,0.32)', accent: '#4C9EFF' },
-  nature:    { bg: ['#0E1A14', '#060E0A'], glow: 'rgba(76,175,130,0.32)', accent: '#4CAF82' },
-  mandala:   { bg: ['#18141E', '#0A0810'], glow: 'rgba(180,140,255,0.28)', accent: '#B48CFF' },
-  abstract:  { bg: ['#16141A', '#0A080C'], glow: 'rgba(201,168,76,0.22)', accent: '#C9A84C' },
-  animals:   { bg: ['#1A1410', '#0C0A08'], glow: 'rgba(255,167,38,0.28)', accent: '#FFA726' },
-  space:     { bg: ['#0E1018', '#060810'], glow: 'rgba(120,140,255,0.3)', accent: '#788CFF' },
-  zen:       { bg: ['#0E1614', '#060C0A'], glow: 'rgba(120,200,180,0.26)', accent: '#78C8B4' },
-  maze:      { bg: ['#161410', '#0A0808'], glow: 'rgba(201,168,76,0.2)', accent: '#C9A84C' },
-  fractal:   { bg: ['#141018', '#08060C'], glow: 'rgba(160,120,255,0.26)', accent: '#A078FF' },
+  featured:  { bg: ['#1A1408', '#0A0804'], glow: 'rgba(240,160,48,0.32)', accent: AMBER },
+  geometric: { bg: ['#141210', '#0A0A08'], glow: 'rgba(240,160,48,0.18)', accent: AMBER_MUTED },
+  nature:    { bg: ['#101410', '#080A08'], glow: 'rgba(180,140,80,0.22)', accent: '#B8A060' },
+  mandala:   { bg: ['#141210', '#0A0A08'], glow: 'rgba(240,160,48,0.16)', accent: AMBER_MUTED },
+  abstract:  { bg: ['#141210', '#0A0A08'], glow: 'rgba(240,160,48,0.2)', accent: AMBER },
+  animals:   { bg: ['#141008', '#0A0806'], glow: 'rgba(240,160,48,0.18)', accent: '#D4A050' },
+  space:     { bg: ['#101014', '#08080A'], glow: 'rgba(200,180,120,0.16)', accent: '#C8B878' },
+  zen:       { bg: ['#101412', '#080A0A'], glow: 'rgba(180,160,100,0.16)', accent: '#B8A868' },
+  maze:      { bg: ['#141210', '#0A0A08'], glow: 'rgba(240,160,48,0.16)', accent: AMBER_MUTED },
+  fractal:   { bg: ['#141012', '#0A080A'], glow: 'rgba(240,160,48,0.14)', accent: AMBER_MUTED },
 };
 
 const paletteFor = (category) => CATEGORY_PALETTE[category] || CATEGORY_PALETTE.featured;
@@ -81,12 +91,16 @@ export const PatternCanvas = ({ pattern, size, showGlow = true, intense = false 
       )}
 
       <View style={styles.metalBall}>
-        <LinearGradient colors={['#FFE8A0', '#C9A84C', '#6A5018']} style={styles.metalBallGrad} />
+        <LinearGradient colors={['#FFE8A0', AMBER, AMBER_DARK]} style={styles.metalBallGrad} />
         <View style={styles.metalBallShine} />
       </View>
 
       <View style={styles.previewCenter}>
-        <SandPreview patternId={pattern.id} size={size * (intense ? 0.8 : 0.72)} />
+        {pattern.isRemote ? (
+          <RemotePatternPreview pattern={pattern} size={size * (intense ? 0.8 : 0.72)} />
+        ) : (
+          <SandPreview patternId={pattern.id} size={size * (intense ? 0.8 : 0.72)} />
+        )}
       </View>
 
       <LinearGradient colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.78)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
@@ -94,7 +108,7 @@ export const PatternCanvas = ({ pattern, size, showGlow = true, intense = false 
   );
 };
 
-const WaveBars = ({ color = Colors.primary, tall = false }) => {
+const WaveBars = ({ color = AMBER, tall = false }) => {
   const bars = useRef([0.35, 0.9, 0.5, 1, 0.45].map(v => new Animated.Value(v))).current;
 
   useEffect(() => {
@@ -189,7 +203,7 @@ export const HeroCarousel = ({
                   </LinearGradient>
 
                   <Pressable style={styles.heroPlayBtn} onPress={() => onPlay(pattern)}>
-                    <LinearGradient colors={['#FFE8A0', '#C9A84C', '#8A6420']} style={styles.heroPlayGrad}>
+                    <LinearGradient colors={AMBER_GRAD} style={styles.heroPlayGrad}>
                       <Ionicons name="play" size={24} color="#1A1208" style={{ marginLeft: 3 }} />
                     </LinearGradient>
                   </Pressable>
@@ -227,12 +241,12 @@ export const FeaturedPatternCard = ({ pattern, width, height, isActive, isPlayin
             </View>
           )}
           {pattern.isNew && !isPlaying && (
-            <LinearGradient colors={Colors.gradientPrimary} style={styles.newBadge}>
+            <LinearGradient colors={AMBER_GRAD} style={styles.newBadge}>
               <Text style={styles.newBadgeText}>NEW</Text>
             </LinearGradient>
           )}
           <View style={styles.featuredPlay}>
-            <LinearGradient colors={Colors.gradientPrimary} style={styles.featuredPlayGrad}>
+            <LinearGradient colors={AMBER_GRAD} style={styles.featuredPlayGrad}>
               <Ionicons name="play" size={16} color="#1A1208" style={{ marginLeft: 2 }} />
             </LinearGradient>
           </View>
@@ -276,14 +290,14 @@ export const GridPatternCard = ({
           <View style={[styles.gridImage, { height: imageH }]}>
             <PatternCanvas pattern={pattern} size={width} />
             {rank != null && rank <= 3 && (
-              <LinearGradient colors={rank === 1 ? ['#FFE8A0', '#C9A84C'] : ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.08)']} style={styles.rankBadge}>
+              <LinearGradient colors={rank === 1 ? AMBER_GRAD : ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.08)']} style={styles.rankBadge}>
                 <Text style={[styles.rankText, rank === 1 && { color: '#1A1208' }]}>#{rank}</Text>
               </LinearGradient>
             )}
             <View style={[styles.catBadge, { borderColor: `${palette.accent}50` }]}>
               <Text style={[styles.catBadgeText, { color: palette.accent }]}>{pattern.category}</Text>
             </View>
-            {isPlaying && <View style={styles.gridLive}><WaveBars color={Colors.primary} /></View>}
+            {isPlaying && <View style={styles.gridLive}><WaveBars color={AMBER} /></View>}
             <View style={styles.gridPlay}>
               <LinearGradient colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0.1)']} style={styles.gridPlayGrad}>
                 <Ionicons name="play" size={14} color="#fff" style={{ marginLeft: 2 }} />
@@ -293,7 +307,7 @@ export const GridPatternCard = ({
               <Text style={styles.gridTitle} numberOfLines={1}>{pattern.name}</Text>
               <View style={styles.gridMeta}>
                 <View style={styles.gridMetaLeft}>
-                  <Ionicons name="time-outline" size={11} color={Colors.primaryLight} />
+                  <Ionicons name="time-outline" size={11} color={AMBER_MUTED} />
                   <Text style={styles.gridDuration}>{formatDuration(pattern.duration)}</Text>
                   <DifficultyPill difficulty={pattern.difficulty} compact />
                 </View>
@@ -330,7 +344,7 @@ export const ListPatternRow = ({ pattern, index, isFavorite, isPlaying, onPress,
       </View>
       {isPlaying && <WaveBars />}
       <Pressable onPress={onToggleFavorite} hitSlop={10} style={styles.listHeart}>
-        <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={20} color={isFavorite ? '#FF6B8A' : Colors.textTertiary} />
+        <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={20} color={isFavorite ? '#FF6B8A' : TEXT_MUTED} />
       </Pressable>
       <View style={styles.listPlay}>
         <Ionicons name="play" size={14} color="#1A1208" style={{ marginLeft: 2 }} />
@@ -353,7 +367,7 @@ export const NowPlayingBanner = ({ pattern, progress = 0, onPress }) => {
   return (
     <Pressable onPress={onPress} style={styles.banner}>
       <Animated.View style={[styles.bannerGlow, { opacity: glow }]} />
-      <LinearGradient colors={['rgba(201,168,76,0.28)', 'rgba(201,168,76,0.05)']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['rgba(240,160,48,0.2)', 'rgba(240,160,48,0.04)']} style={StyleSheet.absoluteFill} />
       <View style={styles.bannerPreview}><PatternCanvas pattern={pattern} size={54} showGlow={false} /></View>
       <View style={styles.bannerInfo}>
         <View style={styles.bannerLabelRow}>
@@ -362,19 +376,19 @@ export const NowPlayingBanner = ({ pattern, progress = 0, onPress }) => {
         </View>
         <Text style={styles.bannerTitle} numberOfLines={1}>{pattern.name}</Text>
         <View style={styles.bannerProgressTrack}>
-          <LinearGradient colors={Colors.gradientPrimary} style={[styles.bannerProgressFill, { width: `${Math.min(100, progress)}%` }]} />
+          <LinearGradient colors={AMBER_GRAD} style={[styles.bannerProgressFill, { width: `${Math.min(100, progress)}%` }]} />
         </View>
       </View>
       <WaveBars />
-      <View style={styles.bannerArrow}><Ionicons name="chevron-forward" size={16} color={Colors.primary} /></View>
+      <View style={styles.bannerArrow}><Ionicons name="chevron-forward" size={16} color={AMBER} /></View>
     </Pressable>
   );
 };
 
 export const StatChip = ({ icon, value, label, active, onPress }) => (
   <Pressable style={[styles.statChip, active && styles.statChipActive]} onPress={onPress}>
-    <LinearGradient colors={active ? ['#F0D080', '#C9A84C'] : ['rgba(201,168,76,0.12)', 'rgba(201,168,76,0.04)']} style={styles.statIcon}>
-      <Ionicons name={icon} size={15} color={active ? '#1A1208' : Colors.primary} />
+    <LinearGradient colors={active ? AMBER_GRAD : [AMBER_GLOW, 'rgba(240,160,48,0.03)']} style={styles.statIcon}>
+      <Ionicons name={icon} size={15} color={active ? '#1A1208' : AMBER} />
     </LinearGradient>
     <Text style={[styles.statValue, active && styles.statValueActive]}>{value}</Text>
     <Text style={[styles.statLabel, active && styles.statLabelActive]}>{label}</Text>
@@ -389,7 +403,7 @@ export const ViewToggle = ({ mode, onChange }) => (
         style={[styles.viewBtn, mode === opt.id && styles.viewBtnActive]}
         onPress={() => onChange(opt.id)}
       >
-        <Ionicons name={opt.icon} size={16} color={mode === opt.id ? '#1A1208' : Colors.textTertiary} />
+        <Ionicons name={opt.icon} size={16} color={mode === opt.id ? '#1A1208' : TEXT_MUTED} />
       </Pressable>
     ))}
   </View>
@@ -405,19 +419,19 @@ export const StickyGlassBar = ({ opacity, top, title, count, onSearch }) => (
             <Text style={styles.stickyCount}>{count} patterns</Text>
           </View>
           <Pressable style={styles.stickySearchBtn} onPress={onSearch}>
-            <Ionicons name="search" size={18} color={Colors.primary} />
+            <Ionicons name="search" size={18} color={AMBER} />
           </Pressable>
         </View>
       </BlurView>
     ) : (
-      <View style={[styles.stickyBlur, { backgroundColor: 'rgba(10,10,15,0.94)' }]}>
+      <View style={[styles.stickyBlur, { backgroundColor: 'rgba(0,0,0,0.94)' }]}>
         <View style={styles.stickyInner}>
           <View>
             <Text style={styles.stickyTitle}>{title}</Text>
             <Text style={styles.stickyCount}>{count} patterns</Text>
           </View>
           <Pressable style={styles.stickySearchBtn} onPress={onSearch}>
-            <Ionicons name="search" size={18} color={Colors.primary} />
+            <Ionicons name="search" size={18} color={AMBER} />
           </Pressable>
         </View>
       </View>
@@ -440,60 +454,60 @@ export const FadeIn = ({ children, index = 0 }) => {
 };
 
 const styles = StyleSheet.create({
-  canvas: { overflow: 'hidden', backgroundColor: Colors.backgroundCard },
+  canvas: { overflow: 'hidden', backgroundColor: CARD },
   glowOrb: { position: 'absolute', alignSelf: 'center', top: '22%', width: '52%', height: '52%', borderRadius: 999 },
   metalBall: {
     position: 'absolute', alignSelf: 'center', top: '35%', width: 24, height: 24, borderRadius: 12,
-    overflow: 'hidden', zIndex: 2, shadowColor: '#C9A84C', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 10, elevation: 5,
+    overflow: 'hidden', zIndex: 2, shadowColor: AMBER, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 10, elevation: 5,
   },
   metalBallGrad: { flex: 1 },
   metalBallShine: { position: 'absolute', top: 3, left: 5, width: 8, height: 5, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.55)' },
   previewCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
 
   carouselWrap: { marginBottom: 8 },
-  heroCard: { borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(201,168,76,0.35)', backgroundColor: Colors.backgroundCard },
+  heroCard: { borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(240,160,48,0.3)', backgroundColor: CARD },
   heroLive: {
     position: 'absolute', top: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, zIndex: 5,
+    backgroundColor: AMBER, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, zIndex: 5,
   },
   heroLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1A1208' },
   heroLiveText: { fontSize: 9, fontWeight: '900', color: '#1A1208', letterSpacing: 0.8 },
   heroFooter: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, paddingTop: 60, zIndex: 3 },
   heroBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start',
-    backgroundColor: Colors.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginBottom: 8,
+    backgroundColor: AMBER, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginBottom: 8,
   },
   heroBadgeText: { fontSize: 9, fontWeight: '800', color: '#1A1208', letterSpacing: 0.5 },
   heroTitle: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.4, marginBottom: 4 },
   heroDesc: { fontSize: 12, color: 'rgba(255,255,255,0.62)', lineHeight: 17, marginBottom: 10, maxWidth: '70%' },
   heroMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  heroDuration: { fontSize: 13, fontWeight: '700', color: Colors.primaryLight },
+  heroDuration: { fontSize: 13, fontWeight: '700', color: AMBER_BRIGHT },
   heroPlayBtn: { position: 'absolute', right: 18, bottom: 24, zIndex: 5 },
   heroPlayGrad: {
     width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.55, shadowRadius: 16, elevation: 10,
+    shadowColor: AMBER, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 16, elevation: 10,
   },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 14 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.15)' },
-  dotActive: { width: 20, backgroundColor: Colors.primary },
+  dotActive: { width: 20, backgroundColor: AMBER },
 
-  featuredCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: Colors.backgroundCard, borderWidth: 1, borderColor: Colors.border },
-  featuredCardActive: { borderColor: Colors.primary, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 20, elevation: 12 },
+  featuredCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: CARD, borderWidth: 1, borderColor: CARD_BORDER },
+  featuredCardActive: { borderColor: AMBER, shadowColor: AMBER, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 20, elevation: 12 },
   liveBadge: {
     position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-    borderWidth: 1, borderColor: 'rgba(201,168,76,0.4)', zIndex: 5,
+    borderWidth: 1, borderColor: 'rgba(240,160,48,0.35)', zIndex: 5,
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.success },
-  liveText: { fontSize: 10, fontWeight: '800', color: Colors.primaryLight, letterSpacing: 1 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#2ECC71' },
+  liveText: { fontSize: 10, fontWeight: '800', color: AMBER_BRIGHT, letterSpacing: 1 },
   newBadge: { position: 'absolute', top: 12, left: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, zIndex: 5 },
   newBadgeText: { fontSize: 9, fontWeight: '800', color: '#1A1208', letterSpacing: 0.6 },
   featuredPlay: { position: 'absolute', alignSelf: 'center', top: '40%', zIndex: 4 },
   featuredPlayGrad: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   featuredFooter: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 14, paddingBottom: 14, paddingTop: 48, zIndex: 3 },
-  featuredTitle: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
+  featuredTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
   featuredMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  featuredDuration: { fontSize: 12, fontWeight: '600', color: Colors.primaryLight },
+  featuredDuration: { fontSize: 12, fontWeight: '600', color: AMBER_MUTED },
 
   waveRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   waveBar: { width: 2.5, borderRadius: 2 },
@@ -503,8 +517,8 @@ const styles = StyleSheet.create({
   diffText: { fontSize: 9, fontWeight: '700', textTransform: 'capitalize' },
 
   gridWrap: { marginBottom: 14 },
-  gridCard: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
-  gridCardActive: { borderColor: Colors.primary, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 10 },
+  gridCard: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: CARD_BORDER },
+  gridCardActive: { borderColor: AMBER, shadowColor: AMBER, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 10 },
   gridImage: { overflow: 'hidden', position: 'relative' },
   rankBadge: { position: 'absolute', top: 10, right: 10, zIndex: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
   rankText: { fontSize: 11, fontWeight: '800', color: '#fff' },
@@ -517,59 +531,59 @@ const styles = StyleSheet.create({
   gridTitle: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 8 },
   gridMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   gridMetaLeft: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
-  gridDuration: { fontSize: 11, fontWeight: '600', color: Colors.primaryLight },
+  gridDuration: { fontSize: 11, fontWeight: '600', color: AMBER_MUTED },
 
   listRow: {
     flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 10, borderRadius: 18,
-    backgroundColor: Colors.backgroundCard, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: CARD, borderWidth: 1, borderColor: CARD_BORDER,
   },
-  listRowActive: { borderColor: Colors.primary, backgroundColor: 'rgba(201,168,76,0.06)' },
-  listRank: { width: 28, fontSize: 13, fontWeight: '800', color: Colors.textTertiary },
+  listRowActive: { borderColor: AMBER, backgroundColor: 'rgba(240,160,48,0.06)' },
+  listRank: { width: 28, fontSize: 13, fontWeight: '800', color: TEXT_MUTED },
   listThumb: { width: 64, height: 64, borderRadius: 14, overflow: 'hidden', borderWidth: 1 },
   listInfo: { flex: 1, marginLeft: 12, marginRight: 8 },
-  listTitle: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginBottom: 2 },
-  listSub: { fontSize: 11, color: Colors.textTertiary, marginBottom: 6 },
+  listTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', marginBottom: 2 },
+  listSub: { fontSize: 11, color: TEXT_MUTED, marginBottom: 6 },
   listMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   listCat: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
-  listDot: { color: Colors.textTertiary, fontSize: 10 },
-  listDur: { fontSize: 10, fontWeight: '600', color: Colors.textSecondary },
+  listDot: { color: TEXT_MUTED, fontSize: 10 },
+  listDur: { fontSize: 10, fontWeight: '600', color: TEXT_MUTED },
   listHeart: { padding: 4 },
   listPlay: {
-    width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.primary,
+    width: 34, height: 34, borderRadius: 17, backgroundColor: AMBER,
     alignItems: 'center', justifyContent: 'center', marginLeft: 6,
   },
 
   banner: {
     flexDirection: 'row', alignItems: 'center', marginBottom: 20, padding: 14, borderRadius: 20,
-    overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(201,168,76,0.4)', backgroundColor: Colors.backgroundCard,
+    overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(240,160,48,0.35)', backgroundColor: CARD,
   },
-  bannerGlow: { ...StyleSheet.absoluteFillObject, backgroundColor: Colors.primary },
-  bannerPreview: { width: 54, height: 54, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(201,168,76,0.35)' },
+  bannerGlow: { ...StyleSheet.absoluteFillObject, backgroundColor: AMBER },
+  bannerPreview: { width: 54, height: 54, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(240,160,48,0.3)' },
   bannerInfo: { flex: 1, marginLeft: 12, marginRight: 8 },
   bannerLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
-  bannerLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.success },
-  bannerLabel: { fontSize: 10, fontWeight: '800', color: Colors.primary, letterSpacing: 0.8, textTransform: 'uppercase' },
-  bannerTitle: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginBottom: 8 },
+  bannerLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#2ECC71' },
+  bannerLabel: { fontSize: 10, fontWeight: '800', color: AMBER, letterSpacing: 0.8, textTransform: 'uppercase' },
+  bannerTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', marginBottom: 8 },
   bannerProgressTrack: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
   bannerProgressFill: { height: '100%', borderRadius: 2 },
-  bannerArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primaryGlow, alignItems: 'center', justifyContent: 'center' },
+  bannerArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: AMBER_GLOW, alignItems: 'center', justifyContent: 'center' },
 
-  statChip: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 18, backgroundColor: Colors.backgroundCard, borderWidth: 1, borderColor: Colors.border },
-  statChipActive: { borderColor: Colors.primary, backgroundColor: 'rgba(201,168,76,0.08)' },
+  statChip: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 18, backgroundColor: CARD, borderWidth: 1, borderColor: CARD_BORDER },
+  statChipActive: { borderColor: AMBER, backgroundColor: 'rgba(240,160,48,0.08)' },
   statIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  statValue: { fontSize: 17, fontWeight: '800', color: Colors.textPrimary },
-  statValueActive: { color: Colors.primaryLight },
-  statLabel: { fontSize: 10, fontWeight: '600', color: Colors.textTertiary, marginTop: 2 },
-  statLabelActive: { color: Colors.primary },
+  statValue: { fontSize: 17, fontWeight: '800', color: '#FFFFFF' },
+  statValueActive: { color: AMBER_BRIGHT },
+  statLabel: { fontSize: 10, fontWeight: '600', color: TEXT_MUTED, marginTop: 2 },
+  statLabelActive: { color: AMBER },
 
-  viewToggle: { flexDirection: 'row', backgroundColor: Colors.backgroundCard, borderRadius: 12, padding: 3, borderWidth: 1, borderColor: Colors.border },
+  viewToggle: { flexDirection: 'row', backgroundColor: CARD, borderRadius: 12, padding: 3, borderWidth: 1, borderColor: CARD_BORDER },
   viewBtn: { width: 36, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  viewBtnActive: { backgroundColor: Colors.primary },
+  viewBtnActive: { backgroundColor: AMBER },
 
   stickyBar: { position: 'absolute', left: 0, right: 0, zIndex: 20, overflow: 'hidden' },
-  stickyBlur: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  stickyBlur: { borderBottomWidth: 1, borderBottomColor: CARD_BORDER },
   stickyInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 },
-  stickyTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  stickyCount: { fontSize: 11, color: Colors.textTertiary },
-  stickySearchBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.primaryGlow, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,168,76,0.25)' },
+  stickyTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  stickyCount: { fontSize: 11, color: TEXT_MUTED },
+  stickySearchBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: AMBER_GLOW, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(240,160,48,0.25)' },
 });

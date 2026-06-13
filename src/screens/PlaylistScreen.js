@@ -10,12 +10,14 @@ import { useSelector, useDispatch } from 'react-redux';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import Colors from '../constants/colors';
 import FluidNCService from '../services/FluidNCService';
+import PatternRemoteService from '../services/PatternRemoteService';
 import {
   clearPlaylist, removeFromPlaylist,
   toggleRepeat, toggleShuffle, setPlaying, reorderPlaylist,
 } from '../store/tableSlice';
+import { addDownloaded } from '../store/patternSlice';
 import { formatDuration } from '../constants/patterns';
-import SandPreview from '../components/SandPreview';
+import { RemotePatternPreview } from '../components/RemotePatternPreview';
 import HapticService from '../services/HapticService';
 
 export default function PlaylistScreen({ navigation }) {
@@ -33,9 +35,12 @@ export default function PlaylistScreen({ navigation }) {
     }
     try {
       dispatch(setPlaying(pattern));
-      await FluidNCService.runPattern(pattern.file);
+      await PatternRemoteService.playPattern(pattern);
+      dispatch(addDownloaded(pattern.id));
       navigation.navigate('NowPlaying');
-    } catch {}
+    } catch {
+      Alert.alert('Error', 'Could not load pattern onto table.');
+    }
   };
 
   const handleClear = () => {
@@ -153,9 +158,8 @@ export default function PlaylistScreen({ navigation }) {
                   <Text style={styles.indexText}>{index + 1}</Text>
                 </View>
 
-                {/* Fixed the preview bug (emoji -> SandPreview) */}
                 <View style={styles.previewContainer}>
-                  <SandPreview patternId={item.id} size={42} />
+                  <RemotePatternPreview pattern={item} size={42} />
                 </View>
 
                 <View style={styles.itemInfo}>

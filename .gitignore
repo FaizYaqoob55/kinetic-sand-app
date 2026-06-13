@@ -51,3 +51,6 @@ yarn-error.*
 
 # Testing
 coverage/
+
+# Patterns repo (separate git clone — run: npm run patterns:clone)
+patterns-zanvora-sand/

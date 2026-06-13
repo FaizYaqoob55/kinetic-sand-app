@@ -70,19 +70,19 @@ class FluidNCService {
     }
   }
 
-  // ─── UPLOAD GCODE FILE ─────────────────────────────────────────────
-  async uploadPattern(filename, gcodeContent) {
+  // ─── UPLOAD PATTERN FILE (text content) ────────────────────────────
+  async uploadPattern(filename, content) {
     if (!this.isConnected) throw new Error('Not connected');
     try {
       const formData = new FormData();
       formData.append('file', {
-        uri: `data:text/plain;base64,${btoa(gcodeContent)}`,
+        uri: `data:text/plain;base64,${this._toBase64(content)}`,
         type: 'text/plain',
         name: filename,
       });
       const res = await axios.post(`${this.baseURL}/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 30000,
+        timeout: 60000,
       });
       return res.data;
     } catch (err) {
@@ -90,9 +90,49 @@ class FluidNCService {
     }
   }
 
-  // ─── RUN A PATTERN ─────────────────────────────────────────────────
+  // ─── UPLOAD FROM LOCAL URI (.thr downloaded to cache) ──────────────
+  async uploadPatternFromUri(filename, fileUri) {
+    if (!this.isConnected) throw new Error('Not connected');
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: fileUri,
+        type: 'application/octet-stream',
+        name: filename,
+      });
+      const res = await axios.post(`${this.baseURL}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      });
+      return res.data;
+    } catch (err) {
+      throw new Error(`Upload failed: ${err.message}`);
+    }
+  }
+
+  _toBase64(str) {
+    if (typeof globalThis.btoa === 'function') return globalThis.btoa(str);
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let output = '';
+    let i = 0;
+    while (i < str.length) {
+      const a = str.charCodeAt(i++);
+      const b = i < str.length ? str.charCodeAt(i++) : 0;
+      const c = i < str.length ? str.charCodeAt(i++) : 0;
+      const bitmap = (a << 16) | (b << 8) | c;
+      output += chars[(bitmap >> 18) & 63]
+        + chars[(bitmap >> 12) & 63]
+        + chars[(bitmap >> 6) & 63]
+        + chars[bitmap & 63];
+    }
+    const pad = str.length % 3;
+    return pad ? output.slice(0, pad - 3) + '==='.slice(pad) : output;
+  }
+
+  // ─── RUN A PATTERN (.thr / .gcode on SD card) ─────────────────────
   async runPattern(filename) {
-    return this.sendCommand(`[ESP220]/${filename}`);
+    const path = filename.startsWith('/') ? filename : `/${filename}`;
+    return this.sendCommand(`[ESP220]${path}`);
   }
 
   // ─── PLAYBACK CONTROLS ─────────────────────────────────────────────

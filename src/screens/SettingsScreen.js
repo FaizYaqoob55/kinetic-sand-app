@@ -1,43 +1,62 @@
-// src/screens/SettingsScreen.js
+// src/screens/SettingsScreen.js — Settings (matches Timer/Lights design)
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Switch, Alert,
+  ScrollView, Switch, Alert, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
-import Colors from '../constants/colors';
 import { setDisconnected } from '../store/tableSlice';
 import WebSocketService from '../services/WebSocketService';
 import FluidNCService from '../services/FluidNCService';
 import Storage, { STORAGE_KEYS } from '../utils/storage';
 import HapticService from '../services/HapticService';
 
-const SettingRow = ({ icon, iconColor, title, subtitle, right, onPress, danger }) => (
-  <TouchableOpacity style={styles.settingRow} onPress={onPress} disabled={!onPress}>
-    <View style={[styles.settingIcon, { backgroundColor: (iconColor || Colors.primary) + '20' }]}>
-      <Ionicons name={icon} size={20} color={iconColor || Colors.primary} />
+const AMBER = '#F0A030';
+const GOLD = '#D4A373';
+const BG = '#000000';
+const CARD = '#0D0D0D';
+const CARD_BORDER = '#1E1E1E';
+
+const SettingRow = ({ icon, iconColor, title, subtitle, right, onPress, danger, isLast }) => (
+  <TouchableOpacity
+    style={[st.row, isLast && st.rowLast]}
+    onPress={onPress}
+    disabled={!onPress}
+    activeOpacity={onPress ? 0.7 : 1}
+  >
+    <View style={[st.rowIcon, { backgroundColor: `${iconColor || AMBER}18` }]}>
+      <Ionicons name={icon} size={18} color={iconColor || AMBER} />
     </View>
-    <View style={styles.settingInfo}>
-      <Text style={[styles.settingTitle, danger && { color: Colors.error }]}>{title}</Text>
-      {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+    <View style={st.rowBody}>
+      <Text style={[st.rowTitle, danger && { color: '#FF7B7B' }]}>{title}</Text>
+      {subtitle ? <Text style={st.rowSub}>{subtitle}</Text> : null}
     </View>
-    <View style={styles.settingRight}>
-      {right || (onPress && <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />)}
+    <View style={st.rowRight}>
+      {right || (onPress && <Ionicons name="chevron-forward" size={16} color="#555" />)}
     </View>
   </TouchableOpacity>
 );
 
+const Section = ({ label, children }) => (
+  <View style={st.section}>
+    <Text style={st.sectionLabel}>{label}</Text>
+    <View style={st.card}>{children}</View>
+  </View>
+);
+
 export default function SettingsScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
-  const { isConnected, tableName, tableIP } = useSelector(s => s.table);
+  const { isConnected, tableName, tableIP } = useSelector((s) => s.table);
+
   const [autoConnect, setAutoConnect] = useState(true);
   const [notifications, setNotifications] = useState(true);
   const [haptics, setHaptics] = useState(true);
   const [loading, setLoading] = useState(true);
 
-  // Load settings from storage
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -50,16 +69,12 @@ export default function SettingsScreen({ navigation }) {
             HapticService.setEnabled(settings.haptics);
           }
         }
-      } catch (err) {
-        console.log('Failed to load settings:', err);
-      } finally {
-        setLoading(false);
-      }
+      } catch {}
+      finally { setLoading(false); }
     };
     loadSettings();
   }, []);
 
-  // Save settings when any of them change
   useEffect(() => {
     if (loading) return;
     const saveSettings = async () => {
@@ -69,7 +84,7 @@ export default function SettingsScreen({ navigation }) {
     saveSettings();
   }, [autoConnect, notifications, haptics, loading]);
 
-  const handleDisconnect = async () => {
+  const handleDisconnect = () => {
     HapticService.heavy();
     Alert.alert('Disconnect Table', 'Disconnect from your SandTable?', [
       { text: 'Cancel', style: 'cancel' },
@@ -99,272 +114,274 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
-  const handleToggleAutoConnect = (val) => {
-    HapticService.medium();
-    setAutoConnect(val);
-  };
-
-  const handleToggleNotifications = (val) => {
-    HapticService.medium();
-    setNotifications(val);
-  };
-
-  const handleToggleHaptics = (val) => {
-    HapticService.medium();
-    setHaptics(val);
-  };
-
-  const handleRate = () => {
-    HapticService.light();
-    Alert.alert('Thank You! ⭐', 'Opening App Store...');
-  };
-
-  const handleSupport = () => {
-    HapticService.light();
-    Alert.alert('Support', 'Email: support@sandtable.pk');
-  };
-
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <Text style={styles.loadingText}>Loading settings...</Text>
+      <View style={[st.root, st.center]}>
+        <Text style={st.loadingTxt}>Loading...</Text>
       </View>
     );
   }
 
-  return (
-    <LinearGradient colors={['#0A0A0F', '#12121A']} style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Settings</Text>
-      </View>
+  const switchTrack = { false: '#2A2A2A', true: 'rgba(240,160,48,0.35)' };
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Table Status */}
-        <View style={styles.tableCard}>
+  return (
+    <View style={st.root}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[st.scroll, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 120 }]}
+      >
+        <View style={st.header}>
+          <View>
+            <Text style={st.title}>Settings</Text>
+            <Text style={st.subtitle}>Manage your device & app</Text>
+          </View>
+          <TouchableOpacity style={st.gearBtn} onPress={() => navigation.navigate('Connect')}>
+            <Ionicons name="wifi-outline" size={18} color="#CCC" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={st.heroWrap}>
+          <Image
+            source={require('../assets/settings-hero.png')}
+            style={st.heroImg}
+            resizeMode="cover"
+          />
           <LinearGradient
-            colors={isConnected ? ['#0F1A0F', '#0A0A0F'] : ['#1A0A0A', '#0A0A0F']}
-            style={styles.tableCardGrad}
-          >
-            <View style={styles.tableCardLeft}>
-              <View style={[styles.tableIcon, {
-                backgroundColor: isConnected ? Colors.success + '20' : Colors.error + '20'
-              }]}>
-                <Text style={{ fontSize: 28 }}>◉</Text>
-              </View>
-              <View>
-                <Text style={styles.tableCardName}>{tableName}</Text>
-                <Text style={[styles.tableCardStatus, {
-                  color: isConnected ? Colors.success : Colors.error,
-                }]}>
-                  {isConnected ? `● Connected — ${tableIP}` : '○ Disconnected'}
-                </Text>
-              </View>
-            </View>
+            colors={['transparent', 'rgba(0,0,0,0.55)', '#000']}
+            style={st.heroFade}
+            pointerEvents="none"
+          />
+        </View>
+
+        <View style={st.statusCard}>
+          <View style={st.statusTop}>
+            <Text style={st.statusName}>{tableName || 'Oasis Mini'}</Text>
             {isConnected && (
-              <TouchableOpacity style={styles.homeBtn} onPress={handleHome}>
-                <Ionicons name="home" size={18} color={Colors.primary} />
+              <TouchableOpacity style={st.homeBtn} onPress={handleHome}>
+                <Ionicons name="home-outline" size={18} color={AMBER} />
               </TouchableOpacity>
             )}
-          </LinearGradient>
-        </View>
-
-        {/* Connection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>CONNECTION</Text>
-          <View style={styles.card}>
-            <SettingRow
-              icon="wifi"
-              title={isConnected ? 'Reconnect' : 'Connect Table'}
-              subtitle="Scan or enter IP"
-              onPress={() => {
-                HapticService.light();
-                navigation.navigate('Connect');
-              }}
-            />
-            <SettingRow
-              icon="refresh"
-              iconColor={Colors.accent}
-              title="Auto Connect"
-              subtitle="Connect automatically on app open"
-              right={
-                <Switch
-                  value={autoConnect}
-                  onValueChange={handleToggleAutoConnect}
-                  trackColor={{ false: Colors.border, true: Colors.primary }}
-                  thumbColor={Colors.textPrimary}
-                />
-              }
-            />
-            {isConnected && (
-              <SettingRow
-                icon="log-out"
-                iconColor={Colors.error}
-                title="Disconnect"
-                subtitle={`Disconnect from ${tableName}`}
-                onPress={handleDisconnect}
-                danger
-              />
-            )}
           </View>
+          <View style={st.statusRow}>
+            <View style={[st.statusDot, !isConnected && st.statusDotOff]} />
+            <Text style={[st.statusTxt, !isConnected && st.statusTxtOff]}>
+              {isConnected ? `Connected · ${tableIP || 'Local'}` : 'Not connected'}
+            </Text>
+          </View>
+          {!isConnected && (
+            <TouchableOpacity
+              style={st.connectBtn}
+              onPress={() => { HapticService.light(); navigation.navigate('Connect'); }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['#FFB84D', AMBER, '#C07A20']} style={st.connectGrad}>
+                <Ionicons name="wifi" size={16} color="#1A1208" />
+                <Text style={st.connectTxt}>Connect Table</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Table Controls */}
+        <Section label="Connection">
+          <SettingRow
+            icon="scan-outline"
+            iconColor={AMBER}
+            title={isConnected ? 'Reconnect' : 'Connect Table'}
+            subtitle="Scan or enter IP address"
+            onPress={() => { HapticService.light(); navigation.navigate('Connect'); }}
+          />
+          <SettingRow
+            icon="refresh-outline"
+            iconColor={GOLD}
+            title="Auto Connect"
+            subtitle="Connect automatically on app open"
+            right={
+              <Switch
+                value={autoConnect}
+                onValueChange={(v) => { HapticService.medium(); setAutoConnect(v); }}
+                trackColor={switchTrack}
+                thumbColor={autoConnect ? AMBER : '#666'}
+              />
+            }
+            isLast={!isConnected}
+          />
+          {isConnected && (
+            <SettingRow
+              icon="log-out-outline"
+              iconColor="#FF7B7B"
+              title="Disconnect"
+              subtitle={`Disconnect from ${tableName || 'table'}`}
+              onPress={handleDisconnect}
+              danger
+              isLast
+            />
+          )}
+        </Section>
+
         {isConnected && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>TABLE CONTROL</Text>
-            <View style={styles.card}>
-              <SettingRow
-                icon="home"
-                iconColor={Colors.accent}
-                title="Home Table"
-                subtitle="Return ball to center position"
-                onPress={handleHome}
-              />
-              <SettingRow
-                icon="alarm"
-                iconColor={Colors.success}
-                title="Schedule"
-                subtitle="Set wake/sleep times"
-                onPress={() => {
-                  HapticService.light();
-                  navigation.navigate('Schedule');
-                }}
-              />
-              <SettingRow
-                icon="color-palette"
-                iconColor="#FF6B9D"
-                title="LED Control"
-                subtitle="Adjust lighting effects"
-                onPress={() => {
-                  HapticService.light();
-                  navigation.navigate('LEDControl');
-                }}
-              />
-            </View>
-          </View>
+          <Section label="Table Control">
+            <SettingRow
+              icon="home-outline"
+              iconColor={AMBER}
+              title="Home Table"
+              subtitle="Return ball to center position"
+              onPress={handleHome}
+            />
+            <SettingRow
+              icon="time-outline"
+              iconColor={GOLD}
+              title="Timer"
+              subtitle="Set auto-off schedule"
+              onPress={() => { HapticService.light(); navigation.navigate('Schedule'); }}
+            />
+            <SettingRow
+              icon="sunny-outline"
+              iconColor="#FFB84D"
+              title="Lights"
+              subtitle="Adjust lighting & effects"
+              onPress={() => { HapticService.light(); navigation.navigate('LEDControl'); }}
+              isLast
+            />
+          </Section>
         )}
 
-        {/* App Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>APP</Text>
-          <View style={styles.card}>
-            <SettingRow
-              icon="notifications"
-              iconColor={Colors.warning}
-              title="Notifications"
-              subtitle="Pattern complete alerts"
-              right={
-                <Switch
-                  value={notifications}
-                  onValueChange={handleToggleNotifications}
-                  trackColor={{ false: Colors.border, true: Colors.primary }}
-                  thumbColor={Colors.textPrimary}
-                />
-              }
-            />
-            <SettingRow
-              icon="phone-portrait"
-              iconColor={Colors.accent}
-              title="Haptic Feedback"
-              subtitle="Vibration on actions"
-              right={
-                <Switch
-                  value={haptics}
-                  onValueChange={handleToggleHaptics}
-                  trackColor={{ false: Colors.border, true: Colors.primary }}
-                  thumbColor={Colors.textPrimary}
-                />
-              }
-            />
-          </View>
-        </View>
+        <Section label="App">
+          <SettingRow
+            icon="notifications-outline"
+            iconColor="#FFA726"
+            title="Notifications"
+            subtitle="Pattern complete alerts"
+            right={
+              <Switch
+                value={notifications}
+                onValueChange={(v) => { HapticService.medium(); setNotifications(v); }}
+                trackColor={switchTrack}
+                thumbColor={notifications ? AMBER : '#666'}
+              />
+            }
+          />
+          <SettingRow
+            icon="phone-portrait-outline"
+            iconColor={GOLD}
+            title="Haptic Feedback"
+            subtitle="Vibration on actions"
+            right={
+              <Switch
+                value={haptics}
+                onValueChange={(v) => { HapticService.medium(); setHaptics(v); }}
+                trackColor={switchTrack}
+                thumbColor={haptics ? AMBER : '#666'}
+              />
+            }
+            isLast
+          />
+        </Section>
 
-        {/* About */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>ABOUT</Text>
-          <View style={styles.card}>
-            <SettingRow
-              icon="information-circle"
-              iconColor={Colors.accent}
-              title="App Version"
-              subtitle="SandTable v1.0.0"
-            />
-            <SettingRow
-              icon="star"
-              iconColor={Colors.primary}
-              title="Rate the App"
-              subtitle="Love it? Give us 5 stars!"
-              onPress={handleRate}
-            />
-            <SettingRow
-              icon="mail"
-              iconColor={Colors.success}
-              title="Contact Support"
-              subtitle="Get help with your SandTable"
-              onPress={handleSupport}
-            />
-          </View>
-        </View>
+        <Section label="About">
+          <SettingRow
+            icon="information-circle-outline"
+            iconColor={GOLD}
+            title="App Version"
+            subtitle="SandTable v1.0.0"
+          />
+          <SettingRow
+            icon="star-outline"
+            iconColor={AMBER}
+            title="Rate the App"
+            subtitle="Love it? Give us 5 stars!"
+            onPress={() => { HapticService.light(); Alert.alert('Thank You', 'Opening App Store...'); }}
+          />
+          <SettingRow
+            icon="mail-outline"
+            iconColor="#2ECC71"
+            title="Contact Support"
+            subtitle="support@sandtable.pk"
+            onPress={() => { HapticService.light(); Alert.alert('Support', 'Email: support@sandtable.pk'); }}
+            isLast
+          />
+        </Section>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>SandTable — Made in Pakistan 🇵🇰</Text>
-          <Text style={styles.footerSub}>Bringing kinetic art to life</Text>
+        <View style={st.footer}>
+          <Text style={st.footerTxt}>SandTable</Text>
+          <Text style={st.footerSub}>Bringing kinetic art to life</Text>
         </View>
-
-        <View style={{ height: 100 }} />
       </ScrollView>
-    </LinearGradient>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  center: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0A0F' },
-  loadingText: { color: Colors.textSecondary, fontSize: 16 },
-  header: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 16 },
-  title: { fontSize: 28, fontWeight: '700', color: Colors.textPrimary },
+const st = StyleSheet.create({
+  root: { flex: 1, backgroundColor: BG },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  loadingTxt: { color: '#666', fontSize: 14 },
+  scroll: { paddingHorizontal: 20 },
 
-  tableCard: { marginHorizontal: 20, marginBottom: 24, borderRadius: 16, overflow: 'hidden' },
-  tableCardGrad: { padding: 16, borderWidth: 1, borderColor: Colors.border, borderRadius: 16 },
-  tableCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
-  tableIcon: {
-    width: 52, height: 52, borderRadius: 26,
-    alignItems: 'center', justifyContent: 'center',
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginBottom: 16,
   },
-  tableCardName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  tableCardStatus: { fontSize: 13, marginTop: 2, fontWeight: '500' },
+  title: { fontSize: 34, fontWeight: '700', color: '#FFF', letterSpacing: -0.5, marginBottom: 4 },
+  subtitle: { fontSize: 14, color: '#777' },
+  gearBtn: {
+    width: 42, height: 42, borderRadius: 12, backgroundColor: '#111',
+    borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center',
+  },
+
+  heroWrap: {
+    width: '100%', aspectRatio: 842 / 288,
+    borderRadius: 18, overflow: 'hidden', marginBottom: 14, backgroundColor: '#0A0A0A',
+  },
+  heroImg: { width: '100%', height: '100%' },
+  heroFade: { ...StyleSheet.absoluteFillObject },
+
+  statusCard: {
+    backgroundColor: CARD, borderRadius: 20, padding: 16,
+    borderWidth: 1, borderColor: CARD_BORDER, marginBottom: 24,
+  },
+  statusTop: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8,
+  },
+  statusName: { fontSize: 17, fontWeight: '600', color: '#FFF' },
   homeBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.primaryGlow,
+    width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(240,160,48,0.1)',
+    borderWidth: 1, borderColor: 'rgba(240,160,48,0.2)',
     alignItems: 'center', justifyContent: 'center',
+  },
+  statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  statusDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#2ECC71', marginRight: 8 },
+  statusDotOff: { backgroundColor: '#E74C3C' },
+  statusTxt: { fontSize: 13, color: '#2ECC71', fontWeight: '500' },
+  statusTxtOff: { color: '#E74C3C' },
+  connectBtn: { borderRadius: 14, overflow: 'hidden', marginTop: 12 },
+  connectGrad: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 12,
+  },
+  connectTxt: { fontSize: 15, fontWeight: '700', color: '#1A1208' },
+
+  section: { marginBottom: 22 },
+  sectionLabel: { fontSize: 15, fontWeight: '600', color: '#FFF', marginBottom: 10 },
+  card: {
+    backgroundColor: CARD, borderRadius: 18,
+    borderWidth: 1, borderColor: CARD_BORDER, overflow: 'hidden',
   },
 
-  section: { paddingHorizontal: 20, marginBottom: 24 },
-  sectionLabel: {
-    fontSize: 11, color: Colors.textTertiary,
-    fontWeight: '700', letterSpacing: 1,
-    marginBottom: 8, marginLeft: 4,
-  },
-  card: {
-    backgroundColor: Colors.backgroundCard,
-    borderRadius: 16, overflow: 'hidden',
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  settingRow: {
+  row: {
     flexDirection: 'row', alignItems: 'center',
-    padding: 14, gap: 14,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    paddingHorizontal: 14, paddingVertical: 14, gap: 12,
+    borderBottomWidth: 1, borderBottomColor: '#1A1A1A',
   },
-  settingIcon: {
-    width: 38, height: 38, borderRadius: 19,
+  rowLast: { borderBottomWidth: 0 },
+  rowIcon: {
+    width: 36, height: 36, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
   },
-  settingInfo: { flex: 1 },
-  settingTitle: { fontSize: 15, fontWeight: '500', color: Colors.textPrimary },
-  settingSubtitle: { fontSize: 12, color: Colors.textTertiary, marginTop: 2 },
-  settingRight: {},
+  rowBody: { flex: 1 },
+  rowTitle: { fontSize: 15, fontWeight: '600', color: '#EEE' },
+  rowSub: { fontSize: 12, color: '#555', marginTop: 2 },
+  rowRight: {},
 
   footer: { alignItems: 'center', paddingVertical: 20 },
-  footerText: { fontSize: 14, color: Colors.textTertiary, fontWeight: '500' },
-  footerSub: { fontSize: 12, color: Colors.textTertiary, marginTop: 4 },
+  footerTxt: { fontSize: 14, color: '#444', fontWeight: '600' },
+  footerSub: { fontSize: 12, color: '#333', marginTop: 4 },
 });

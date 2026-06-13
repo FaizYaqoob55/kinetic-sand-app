@@ -1,493 +1,437 @@
-// src/screens/LEDControlScreen.js — Pixel-perfect reference match
+// src/screens/LEDControlScreen.js — Lights (reference design match)
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Dimensions, PanResponder, Animated, Platform,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  Dimensions, PanResponder, Animated, Platform, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
-import Colors from '../constants/colors';
 import FluidNCService from '../services/FluidNCService';
-import { setLEDColor, setLEDBrightness, setLEDEffect, toggleLED } from '../store/tableSlice';
+import { setLEDColor, setLEDBrightness, setLEDEffect } from '../store/tableSlice';
 import HapticService from '../services/HapticService';
+import ColorWheelPicker from '../components/ColorWheelPicker';
+import Storage from '../utils/storage';
 
 const { width } = Dimensions.get('window');
-const isWeb = Platform.OS === 'web';
-const CONTENT_W = isWeb ? Math.min(width, 460) : width;
-const SLIDER_W = CONTENT_W - 88; // full card width minus padding
+const CONTENT_W = Platform.OS === 'web' ? Math.min(width, 460) : width;
+const H_PAD = 20;
+const GOLD = '#D4A373';
+const BG = '#000000';
+const CARD = '#141414';
+const CARD_BORDER = '#242424';
 
-// ── DATA ────────────────────────────────────────────────────────────────────
-const SWATCHES = [
-  '#F5E6C8', // warm white/cream
-  '#FF8C00', // orange
-  '#FFD700', // yellow
-  '#2ECC71', // green
-  '#00BCD4', // cyan
-  '#7E57C2', // purple
-  '#E91E8C', // pink
-  // rainbow handled separately
-];
+const SWATCHES = ['#F5E6C8', '#FF8C00', '#FFD700', '#2ECC71', '#00BCD4', '#3B5BDB', '#E91E8C'];
 
 const EFFECTS = [
-  { id: 'solid',     name: 'Steady',    icon: 'sparkles-outline' },
-  { id: 'breathing', name: 'Breathing', icon: 'reorder-three-outline' },
-  { id: 'pulse',     name: 'Pulse',     icon: 'pulse-outline' },
-  { id: 'wave',      name: 'Wave',      icon: 'analytics-outline' },
-  { id: 'rainbow',   name: 'Rainbow',   icon: 'color-filter-outline' },
-  { id: 'flow',      name: 'Flow',      icon: 'reorder-two-outline' },
+  { id: 'solid', name: 'Steady', icon: 'sparkles', iconOff: 'sparkles-outline' },
+  { id: 'breathing', name: 'Breathing', icon: 'water-outline', iconOff: 'water-outline' },
+  { id: 'pulse', name: 'Pulse', icon: 'pulse', iconOff: 'pulse-outline' },
+  { id: 'wave', name: 'Wave', icon: 'analytics-outline', iconOff: 'analytics-outline' },
+  { id: 'rainbow', name: 'Rainbow', icon: 'color-filter-outline', iconOff: 'color-filter-outline' },
+  { id: 'flow', name: 'Flow', icon: 'reorder-two-outline', iconOff: 'reorder-two-outline' },
 ];
 
 const SCENES = [
-  { id: 'warm',     name: 'Warm Relax', icon: 'flame',      iconColor: '#FF8C00', r: 255, g: 140, b: 0   },
-  { id: 'focus',    name: 'Focus',      icon: 'radio-button-on', iconColor: '#00BCD4', r: 0,   g: 188, b: 212 },
-  { id: 'energize', name: 'Energize',   icon: 'flash',      iconColor: '#2ECC71', r: 46,  g: 204, b: 113 },
-  { id: 'sleep',    name: 'Sleep',      icon: 'moon-outline', iconColor: '#9B59B6', r: 126, g: 87,  b: 194 },
-  { id: 'romance',  name: 'Romance',    icon: 'heart-outline', iconColor: '#E91E63', r: 233, g: 30,  b: 140 },
+  { id: 'warm', name: 'Warm Relax', icon: 'flame', color: '#FF8C00', r: 255, g: 140, b: 0 },
+  { id: 'focus', name: 'Focus', icon: 'radio-button-on-outline', color: '#00BCD4', r: 0, g: 188, b: 212 },
+  { id: 'energize', name: 'Energize', icon: 'flash', color: '#2ECC71', r: 46, g: 204, b: 113 },
+  { id: 'sleep', name: 'Sleep', icon: 'moon', color: '#9B59B6', r: 126, g: 87, b: 194 },
+  { id: 'romance', name: 'Romance', icon: 'heart', color: '#E91E63', r: 233, g: 30, b: 140 },
 ];
 
-// ── BRIGHTNESS SLIDER ────────────────────────────────────────────────────────
+const HW_EFFECT = { solid: 'solid', breathing: 'pulse', pulse: 'pulse', wave: 'cycle', rainbow: 'rainbow', flow: 'cycle' };
+const SLEEP_LABELS = { 0: 'Off', 15: '15 min', 30: '30 min', 45: '45 min', 60: '1 hour', 120: '2 hours', 240: '4 hours' };
+
+const rgbToHex = (r, g, b) =>
+  `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+
 const BrightnessSlider = ({ value, onRelease }) => {
-  const anim = useRef(new Animated.Value((value / 255) * (CONTENT_W - 88))).current;
+  const trackW = useRef(CONTENT_W - H_PAD * 2 - 96);
+  const thumbX = useRef(new Animated.Value((value / 255) * trackW.current)).current;
   const [local, setLocal] = useState(value);
-  const SW = CONTENT_W - 88;
 
   useEffect(() => {
     setLocal(value);
-    Animated.timing(anim, {
-      toValue: (value / 255) * SW,
-      duration: 150,
-      useNativeDriver: false,
-    }).start();
-  }, [value]);
+    thumbX.setValue((value / 255) * trackW.current);
+  }, [value, thumbX]);
 
-  const pan = PanResponder.create({
+  const update = (x) => {
+    const c = Math.max(0, Math.min(trackW.current, x));
+    thumbX.setValue(c);
+    setLocal(Math.round((c / trackW.current) * 255));
+  };
+
+  const pan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onPanResponderMove: (_, gs) => {
-      const x = Math.max(0, Math.min(SW, gs.moveX - 44));
-      anim.setValue(x);
-      setLocal(Math.round((x / SW) * 255));
-    },
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => update(e.nativeEvent.locationX),
+    onPanResponderMove: (e) => update(e.nativeEvent.locationX),
     onPanResponderRelease: () => { HapticService.light(); onRelease(local); },
-  });
-
-  const pct = Math.round((local / 255) * 100);
+  })).current;
 
   return (
     <View style={sl.row}>
-      <Ionicons name="sunny-outline" size={15} color="#666" />
-      <View style={sl.trackWrap} {...pan.panHandlers}>
-        <LinearGradient
-          colors={['#1A1A1A', '#D4AA70']}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-        />
-        <Animated.View style={[sl.thumb, { left: anim }]} />
+      <Ionicons name="sunny-outline" size={16} color="#555" />
+      <View
+        style={sl.trackWrap}
+        onLayout={(e) => { trackW.current = e.nativeEvent.layout.width; }}
+        {...pan.panHandlers}
+      >
+        <View style={sl.trackBg} />
+        <Animated.View style={[sl.trackFill, { width: thumbX }]}>
+          <LinearGradient
+            colors={['#2A1A08', '#8A6030', GOLD]}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+          />
+        </Animated.View>
+        <Animated.View style={[sl.thumb, { left: thumbX }]} />
       </View>
-      <Ionicons name="sunny" size={18} color="#AAAAAA" />
-      <Text style={sl.pct}>{pct}%</Text>
+      <Ionicons name="sunny" size={18} color="#AAA" />
+      <Text style={sl.pct}>{Math.round((local / 255) * 100)}%</Text>
     </View>
   );
 };
 
-// ── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function LEDControlScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
-  const { ledColor, ledBrightness, ledEffect, ledEnabled } = useSelector(s => s.table);
+  const { ledColor, ledBrightness, ledEffect, isConnected, tableName, sleepTimer } = useSelector((s) => s.table);
 
-  const [brightness, setBrightness] = useState(ledBrightness ?? 200);
-  const [activeTab, setActiveTab] = useState('ambient');
+  const [brightness, setBrightness] = useState(ledBrightness ?? 255);
+  const [showColorWheel, setShowColorWheel] = useState(false);
+  const [pickingColor, setPickingColor] = useState(null);
+  const [autoOffLabel, setAutoOffLabel] = useState('Off');
 
-  const hexStr = `#${ledColor.r.toString(16).padStart(2,'0')}${ledColor.g.toString(16).padStart(2,'0')}${ledColor.b.toString(16).padStart(2,'0')}`.toUpperCase();
+  const displayColor = pickingColor ?? ledColor;
+  const displayHex = rgbToHex(displayColor.r, displayColor.g, displayColor.b);
+  const isPresetSelected = SWATCHES.some((hex) => hex.toUpperCase() === displayHex);
+  const showCustomSwatch = !!pickingColor || (!isPresetSelected && ledEffect !== 'rainbow');
 
-  const applyColorHex = (hex) => {
+  useEffect(() => {
+    setAutoOffLabel(SLEEP_LABELS[sleepTimer] ?? (sleepTimer ? `${sleepTimer} min` : 'Off'));
+  }, [sleepTimer]);
+
+  useEffect(() => {
+    const loadSleep = async () => {
+      try {
+        const schedule = await Storage.get('schedule');
+        if (schedule?.selectedSleep !== undefined && sleepTimer == null) {
+          setAutoOffLabel(SLEEP_LABELS[schedule.selectedSleep] ?? 'Off');
+        }
+      } catch {}
+    };
+    loadSleep();
+  }, [sleepTimer]);
+
+  const applyColor = (hex) => {
     HapticService.light();
-    const nr = parseInt(hex.slice(1, 3), 16);
-    const ng = parseInt(hex.slice(3, 5), 16);
-    const nb = parseInt(hex.slice(5, 7), 16);
-    dispatch(setLEDColor({ r: nr, g: ng, b: nb }));
-    try { FluidNCService.setLEDColor(nr, ng, nb); } catch {}
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    dispatch(setLEDColor({ r, g, b }));
+    dispatch(setLEDEffect('solid'));
+    setPickingColor(null);
+    if (isConnected) try { FluidNCService.setLEDColor(r, g, b); } catch {}
   };
 
   const applyBrightness = (val) => {
     setBrightness(val);
     dispatch(setLEDBrightness(val));
-    try { FluidNCService.setLEDBrightness(val); } catch {}
+    if (isConnected) try { FluidNCService.setLEDBrightness(val); } catch {}
   };
 
-  const applyEffect = (eid) => {
+  const applyEffect = (id) => {
     HapticService.light();
-    dispatch(setLEDEffect(eid));
-    try { FluidNCService.setLEDEffect(eid); } catch {}
+    dispatch(setLEDEffect(id));
+    if (isConnected) try { FluidNCService.setLEDEffect(HW_EFFECT[id] || 'solid'); } catch {}
   };
 
   const applyScene = (scene) => {
     HapticService.light();
     dispatch(setLEDColor({ r: scene.r, g: scene.g, b: scene.b }));
-    try { FluidNCService.setLEDColor(scene.r, scene.g, scene.b); } catch {}
+    dispatch(setLEDEffect('solid'));
+    setPickingColor(null);
+    if (isConnected) try { FluidNCService.setLEDColor(scene.r, scene.g, scene.b); } catch {}
   };
 
-  const TABS = [
-    { id: 'ambient',  label: 'Ambient',  icon: 'sunny' },
-    { id: 'effects',  label: 'Effects',  icon: 'sparkles-outline' },
-    { id: 'scenes',   label: 'Scenes',   icon: 'image-outline' },
-    { id: 'sync',     label: 'Sync',     icon: 'musical-notes-outline' },
-  ];
+  const applyCustomColor = ({ r, g, b }) => {
+    dispatch(setLEDColor({ r, g, b }));
+    dispatch(setLEDEffect('solid'));
+    setPickingColor(null);
+    if (isConnected) try { FluidNCService.setLEDColor(r, g, b); } catch {}
+  };
+
+  const closeColorWheel = () => {
+    setShowColorWheel(false);
+    setPickingColor(null);
+  };
+
+  const activeSceneId = SCENES.find(
+    (sc) => sc.r === ledColor.r && sc.g === ledColor.g && sc.b === ledColor.b && ledEffect === 'solid',
+  )?.id;
 
   return (
     <View style={s.root}>
-      {/* Dark gradient background */}
-      <LinearGradient
-        colors={['#1C160E', '#0C0C0C', '#0A0A0A']}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.3 }}
-      />
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
-
-        {/* ── HEADER ── */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[s.scroll, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 120 }]}
+      >
         <View style={s.header}>
-          <View>
+          {navigation.canGoBack() && (
+            <TouchableOpacity
+              style={s.backBtn}
+              onPress={() => { HapticService.light(); navigation.goBack(); }}
+            >
+              <Ionicons name="chevron-back" size={22} color="#CCC" />
+            </TouchableOpacity>
+          )}
+          <View style={s.headerText}>
             <Text style={s.title}>Lights</Text>
             <Text style={s.subtitle}>Customize your ambiance</Text>
           </View>
-          <TouchableOpacity style={s.gearBtn}>
-            <Ionicons name="settings-outline" size={18} color="#CCCCCC" />
+          {!navigation.canGoBack() ? (
+            <TouchableOpacity style={s.gearBtn} onPress={() => navigation.navigate('Settings')}>
+              <Ionicons name="settings-outline" size={18} color="#CCC" />
+            </TouchableOpacity>
+          ) : (
+            <View style={s.headerSpacer} />
+          )}
+        </View>
+
+        <View style={s.heroWrap}>
+          <Image
+            source={require('../assets/lights-hero.png')}
+            style={s.heroImg}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.55)', '#000']}
+            style={s.heroFade}
+            pointerEvents="none"
+          />
+        </View>
+
+        <View style={s.deviceCard}>
+          <View style={s.deviceInfo}>
+            <View style={s.deviceTopRow}>
+              <Text style={s.deviceName}>{tableName || 'Oasis Mini'}</Text>
+              <View style={s.battery}>
+                <Ionicons name="battery-half" size={18} color="#2ECC71" />
+                <Text style={s.batteryTxt}>80%</Text>
+              </View>
+            </View>
+
+            <View style={s.connRow}>
+              <View style={[s.connDot, !isConnected && s.connDotOff]} />
+              <Text style={[s.connTxt, !isConnected && s.connTxtOff]}>
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </Text>
+            </View>
+
+            <TouchableOpacity style={s.devBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.85}>
+              <Text style={s.devBtnTxt}>Device Settings</Text>
+              <Ionicons name="chevron-forward" size={14} color="#CCCCCC" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <Text style={s.sectionLabel}>Color</Text>
+        <View style={s.swatchRow}>
+          {SWATCHES.map((hex) => (
+            <TouchableOpacity
+              key={hex}
+              onPress={() => applyColor(hex)}
+              style={[s.swatch, { backgroundColor: hex }, !showCustomSwatch && displayHex === hex.toUpperCase() && s.swatchOn]}
+            />
+          ))}
+          <TouchableOpacity
+            style={[s.swatch, s.swatchRainbow, showCustomSwatch && s.swatchOn]}
+            onPress={() => { HapticService.light(); setShowColorWheel(true); }}
+          >
+            {showCustomSwatch ? (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: displayHex }]} />
+            ) : (
+              <LinearGradient
+                colors={['#FF0000', '#FF8C00', '#FFD700', '#2ECC71', '#00BCD4', '#7E57C2', '#E91E8C']}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              />
+            )}
           </TouchableOpacity>
         </View>
 
-        {/* ── DEVICE CARD ── */}
-        <View style={s.deviceCard}>
-          {/* Left: device image simulation */}
-          <View style={s.deviceImgWrap}>
-            <LinearGradient
-              colors={['#3A2800', '#1A1400']}
-              style={StyleSheet.absoluteFill}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            />
-            {/* Glow ring */}
-            <View style={s.deviceGlowRing} />
-            <Ionicons name="disc" size={32} color="#D4AA70" />
-          </View>
+        <BrightnessSlider value={brightness} onRelease={applyBrightness} />
 
-          {/* Right: info */}
-          <View style={s.deviceInfo}>
-            <Text style={s.deviceName}>Oasis Mini</Text>
-            <View style={s.connectedRow}>
-              <View style={s.greenDot} />
-              <Text style={s.connectedTxt}>Connected</Text>
-            </View>
-            <TouchableOpacity style={s.devSettingsBtn}>
-              <Text style={s.devSettingsTxt}>Device Settings</Text>
-              <Ionicons name="chevron-forward" size={13} color="#CCCCCC" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Battery */}
-          <View style={s.batteryWrap}>
-            <Ionicons name="battery-half" size={18} color="#2ECC71" />
-            <Text style={s.batteryTxt}> 80%</Text>
-          </View>
+        <View style={s.sectionHead}>
+          <Text style={s.sectionLabel}>Effects</Text>
+          <Text style={s.link}>View All</Text>
         </View>
-
-        {/* ── TABS ── */}
-        <View style={s.tabsRow}>
-          {TABS.map(tab => {
-            const isActive = activeTab === tab.id;
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hRow}>
+          {EFFECTS.map((fx) => {
+            const on = ledEffect === fx.id;
             return (
-              <TouchableOpacity
-                key={tab.id}
-                style={[s.tab, isActive && s.tabActive]}
-                onPress={() => { HapticService.light(); setActiveTab(tab.id); }}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={tab.icon}
-                  size={14}
-                  color={isActive ? '#0A0A0A' : '#777777'}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[s.tabTxt, isActive && s.tabTxtActive]}>{tab.label}</Text>
+              <TouchableOpacity key={fx.id} style={[s.effectCard, on && s.effectOn]} onPress={() => applyEffect(fx.id)}>
+                <Ionicons name={on ? fx.icon : fx.iconOff} size={22} color={on ? GOLD : '#666'} />
+                <Text style={[s.effectTxt, on && s.effectTxtOn]}>{fx.name}</Text>
               </TouchableOpacity>
             );
           })}
+        </ScrollView>
+
+        <View style={s.sectionHead}>
+          <Text style={s.sectionLabel}>Quick Scenes</Text>
+          <Text style={s.link}>Edit</Text>
         </View>
-
-        {/* ── COLOR SECTION ── */}
-        <View style={s.card}>
-          <Text style={s.cardLabel}>Color</Text>
-
-          {/* Swatches row */}
-          <View style={s.swatchRow}>
-            {SWATCHES.map((hex, i) => {
-              const isActive = hexStr === hex;
-              return (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => applyColorHex(hex)}
-                  style={[s.swatch, { backgroundColor: hex }, isActive && s.swatchActive]}
-                />
-              );
-            })}
-            {/* Rainbow circle */}
-            <TouchableOpacity
-              style={[s.swatch, s.swatchRainbow, ledEffect === 'rainbow' && s.swatchActive]}
-              onPress={() => applyEffect('rainbow')}
-            >
-              <LinearGradient
-                colors={['#FF0000', '#FF8C00', '#FFD700', '#2ECC71', '#00BCD4', '#7E57C2', '#E91E8C', '#FF0000']}
-                style={StyleSheet.absoluteFill}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* Brightness slider */}
-          <BrightnessSlider value={brightness} onRelease={applyBrightness} />
-        </View>
-
-
-        {/* ── EFFECTS ── - no card, directly on background like reference */}
-        <View style={s.section}>
-          <View style={s.rowBetween}>
-            <Text style={s.sectionHeading}>Effects</Text>
-            <TouchableOpacity>
-              <Text style={s.goldLink}>View All</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.hScrollContent}
-          >
-            {EFFECTS.map(fx => {
-              const isActive = ledEffect === fx.id;
-              return (
-                <TouchableOpacity
-                  key={fx.id}
-                  style={[s.effectCard, isActive && s.effectCardActive]}
-                  onPress={() => applyEffect(fx.id)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name={fx.icon}
-                    size={22}
-                    color={isActive ? '#D4AA70' : '#777777'}
-                  />
-                  <Text style={[s.effectName, isActive && s.effectNameActive]}>
-                    {fx.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-
-        {/* ── QUICK SCENES ── - no card, directly on background like reference */}
-        <View style={s.section}>
-          <View style={s.rowBetween}>
-            <Text style={s.sectionHeading}>Quick Scenes</Text>
-            <TouchableOpacity>
-              <Text style={s.goldLink}>Edit</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.hScrollContent}
-          >
-            {SCENES.map(scene => (
-              <TouchableOpacity
-                key={scene.id}
-                style={s.sceneCard}
-                onPress={() => applyScene(scene)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name={scene.icon} size={28} color={scene.iconColor} />
-                <Text style={s.sceneName}>{scene.name}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.hRow}>
+          {SCENES.map((sc) => {
+            const on = activeSceneId === sc.id;
+            return (
+              <TouchableOpacity key={sc.id} style={[s.sceneCard, on && s.sceneOn]} onPress={() => applyScene(sc)}>
+                <Ionicons name={sc.icon} size={28} color={sc.color} />
+                <Text style={[s.sceneTxt, on && s.sceneTxtOn]}>{sc.name}</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+            );
+          })}
+        </ScrollView>
 
-        {/* ── AUTO OFF ── */}
-        <View style={s.autoOffCard}>
-          <Ionicons name="time-outline" size={26} color="#888" />
-          <View style={s.autoOffText}>
-            <Text style={s.autoOffLabel}>Set Auto Off</Text>
-            <Text style={s.autoOffVal}>Off</Text>
+        <TouchableOpacity style={s.autoOff} onPress={() => navigation.navigate('Schedule')} activeOpacity={0.85}>
+          <Ionicons name="time-outline" size={26} color="#777" />
+          <View style={s.autoOffMid}>
+            <Text style={s.autoOffTitle}>Set Auto Off</Text>
+            <Text style={s.autoOffVal}>{autoOffLabel}</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color="#555" />
-        </View>
-
-        <View style={{ height: 120 }} />
+          <Ionicons name="chevron-forward" size={20} color="#444" />
+        </TouchableOpacity>
       </ScrollView>
+
+      <ColorWheelPicker
+        visible={showColorWheel}
+        initialRgb={ledColor}
+        onClose={closeColorWheel}
+        onApply={applyCustomColor}
+        onColorChange={setPickingColor}
+      />
     </View>
   );
 }
 
-// ── STYLES ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0A' },
-  scroll: { paddingHorizontal: 20, paddingTop: 58, paddingBottom: 40 },
+  root: { flex: 1, backgroundColor: BG },
+  scroll: { paddingHorizontal: H_PAD },
 
-  // Header
   header: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'flex-start', marginBottom: 20,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 16, gap: 8,
   },
-  title:    { fontSize: 30, fontWeight: '700', color: '#FFFFFF', marginBottom: 3 },
-  subtitle: { fontSize: 13, color: '#888888' },
+  headerText: { flex: 1 },
+  backBtn: {
+    width: 42, height: 42, borderRadius: 12, backgroundColor: '#111',
+    borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center',
+  },
+  headerSpacer: { width: 42 },
+  title: { fontSize: 34, fontWeight: '700', color: '#FFFFFF', marginBottom: 4, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: '#777777', fontWeight: '400' },
   gearBtn: {
-    width: 40, height: 40, borderRadius: 10,
-    backgroundColor: '#1E1E1E',
-    borderWidth: 1, borderColor: '#2A2A2A',
-    alignItems: 'center', justifyContent: 'center',
+    width: 42, height: 42, borderRadius: 12, backgroundColor: '#111111',
+    borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center',
   },
 
-  // Device Card
+  heroWrap: {
+    width: '100%',
+    aspectRatio: 842 / 288,
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 14,
+    backgroundColor: '#0A0A0A',
+  },
+  heroImg: { width: '100%', height: '100%' },
+  heroFade: { ...StyleSheet.absoluteFillObject },
+
   deviceCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#181818', borderRadius: 18,
-    padding: 16, marginBottom: 20,
-    borderWidth: 1, borderColor: '#2A2A2A',
-  },
-  deviceImgWrap: {
-    width: 70, height: 70, borderRadius: 35,
-    overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
-    marginRight: 14,
-    shadowColor: '#D4AA70', shadowOpacity: 0.3, shadowRadius: 10,
-    elevation: 6,
-  },
-  deviceGlowRing: {
-    position: 'absolute', width: 70, height: 70, borderRadius: 35,
-    borderWidth: 2, borderColor: '#D4AA7040',
+    backgroundColor: CARD,
+    borderRadius: 20, padding: 16, borderWidth: 1, borderColor: CARD_BORDER,
+    marginBottom: 24,
   },
   deviceInfo: { flex: 1 },
-  deviceName: { fontSize: 18, fontWeight: '600', color: '#FFFFFF', marginBottom: 5 },
-  connectedRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  greenDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#2ECC71', marginRight: 6 },
-  connectedTxt: { fontSize: 13, color: '#2ECC71', fontWeight: '500' },
-  devSettingsBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#2A2A2A', borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 5, alignSelf: 'flex-start',
+  deviceTopRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6,
   },
-  devSettingsTxt: { fontSize: 12, color: '#CCCCCC', marginRight: 3 },
-  batteryWrap: { flexDirection: 'row', alignItems: 'center' },
-  batteryTxt: { fontSize: 12, fontWeight: '600', color: '#CCCCCC' },
+  deviceName: { fontSize: 17, fontWeight: '600', color: '#FFFFFF', flex: 1 },
+  connRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  connDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#2ECC71', marginRight: 6 },
+  connDotOff: { backgroundColor: '#E74C3C' },
+  connTxt: { fontSize: 13, color: '#2ECC71', fontWeight: '500' },
+  connTxtOff: { color: '#E74C3C' },
+  devBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#1C1C1C', borderRadius: 22,
+    paddingHorizontal: 14, paddingVertical: 10, alignSelf: 'stretch',
+  },
+  devBtnTxt: { fontSize: 13, color: '#DDDDDD', fontWeight: '500' },
+  battery: { flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
+  batteryTxt: { fontSize: 13, fontWeight: '600', color: '#FFFFFF', marginLeft: 3 },
 
-  // Tabs
-  tabsRow: {
-    flexDirection: 'row', alignItems: 'center',
-    marginBottom: 20, gap: 6,
+  sectionLabel: { fontSize: 17, fontWeight: '600', color: '#FFFFFF' },
+  sectionHead: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 26, marginBottom: 14,
   },
-  tab: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 20,
-  },
-  tabActive: { backgroundColor: '#D4AA70' },
-  tabTxt: { fontSize: 13, color: '#777777', fontWeight: '500' },
-  tabTxtActive: { color: '#0A0A0A', fontWeight: '700' },
+  link: { fontSize: 14, color: GOLD, fontWeight: '500' },
 
-  // Card (Color / Effects / Scenes sections)
-  card: {
-    backgroundColor: '#181818',
-    borderRadius: 18, padding: 18,
-    marginBottom: 18,
-    borderWidth: 1, borderColor: '#242424',
-  },
-  cardLabel: {
-    fontSize: 16, fontWeight: '600', color: '#FFFFFF',
-    marginBottom: 16,
-  },
-  rowBetween: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 16,
-  },
-  goldLink: { fontSize: 14, color: '#D4AA70', fontWeight: '500' },
-
-  // Color swatches
   swatchRow: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 22,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 14, marginBottom: 18,
   },
-  swatch: {
-    width: 28, height: 28, borderRadius: 14,
-  },
-  swatchActive: {
+  swatch: { width: 32, height: 32, borderRadius: 16 },
+  swatchOn: {
     borderWidth: 2.5, borderColor: '#FFFFFF',
-    shadowColor: '#FFF', shadowOpacity: 0.4, shadowRadius: 4,
-    transform: [{ scale: 1.1 }],
+    shadowColor: '#FFFFFF', shadowOpacity: 0.45, shadowRadius: 6, elevation: 4,
   },
   swatchRainbow: { overflow: 'hidden' },
 
-  // new plain sections (effects / scenes without outer card)
-  section: {
-    marginBottom: 20,
-  },
-  sectionHeading: {
-    fontSize: 16, fontWeight: '600', color: '#FFFFFF',
-    marginBottom: 14,
-  },
-  hScrollContent: { gap: 8, paddingRight: 4 },
+  hRow: { gap: 10, paddingRight: 4, marginBottom: 4 },
 
-  // Effect cards — compact like reference, all 6 visible
   effectCard: {
-    width: 60, height: 80,
-    backgroundColor: '#222222', borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#2E2E2E', gap: 8,
+    width: 62, height: 84, backgroundColor: '#1A1A1A', borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1, borderColor: '#2A2A2A',
   },
-  effectCardActive: {
-    borderWidth: 1.5, borderColor: '#D4AA70',
-    backgroundColor: '#1E1A12',
-  },
-  effectName: { fontSize: 10, color: '#777777', fontWeight: '500' },
-  effectNameActive: { color: '#DDDDDD', fontWeight: '600' },
+  effectOn: { borderColor: GOLD, borderWidth: 1.5, backgroundColor: '#1A1510' },
+  effectTxt: { fontSize: 10, color: '#666666', fontWeight: '500' },
+  effectTxtOn: { color: '#DDDDDD', fontWeight: '600' },
 
-  // Scene cards — 5 visible, square with big colored icon
   sceneCard: {
-    width: 74, height: 82,
-    backgroundColor: '#222222', borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#2E2E2E', gap: 8,
+    width: 76, height: 88, backgroundColor: '#1A1A1A', borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#2A2A2A',
   },
-  sceneName: { fontSize: 10, color: '#AAAAAA', fontWeight: '500' },
+  sceneTxt: { fontSize: 10, color: '#999999', fontWeight: '500', textAlign: 'center' },
+  sceneTxtOn: { color: GOLD, fontWeight: '700' },
+  sceneOn: { borderColor: GOLD, borderWidth: 1.5, backgroundColor: '#1A1510' },
 
-  // Auto Off
-  autoOffCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#181818', borderRadius: 18,
-    padding: 20, borderWidth: 1, borderColor: '#242424',
-    gap: 14,
+  autoOff: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: CARD,
+    borderRadius: 20, padding: 20, marginTop: 26, borderWidth: 1, borderColor: CARD_BORDER, gap: 14,
   },
-  autoOffText: { flex: 1 },
-  autoOffLabel: { fontSize: 14, color: '#AAAAAA', fontWeight: '500' },
-  autoOffVal: { fontSize: 14, color: '#D4AA70', fontWeight: '600', marginTop: 2 },
+  autoOffMid: { flex: 1 },
+  autoOffTitle: { fontSize: 15, color: '#999999', fontWeight: '500' },
+  autoOffVal: { fontSize: 15, color: GOLD, fontWeight: '600', marginTop: 2 },
 });
 
-// Brightness slider styles
 const sl = StyleSheet.create({
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-  },
-  trackWrap: {
-    flex: 1, height: 6, borderRadius: 3,
-    overflow: 'hidden', justifyContent: 'center',
-    position: 'relative',
-  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
+  trackWrap: { flex: 1, height: 6, borderRadius: 3, overflow: 'visible', position: 'relative' },
+  trackBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#1A1A1A', borderRadius: 3 },
+  trackFill: { position: 'absolute', left: 0, top: 0, height: 6, borderRadius: 3, overflow: 'hidden' },
   thumb: {
-    position: 'absolute',
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    top: -7, marginLeft: -10,
-    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 4,
-    borderWidth: 2, borderColor: '#000',
+    position: 'absolute', width: 22, height: 22, borderRadius: 11, backgroundColor: '#FFFFFF',
+    top: -8, marginLeft: -11, borderWidth: 1, borderColor: '#E0E0E0', elevation: 5,
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4,
   },
-  pct: { fontSize: 13, color: '#CCCCCC', fontWeight: '600', width: 42, textAlign: 'right' },
+  pct: { fontSize: 14, color: '#CCCCCC', fontWeight: '600', width: 44, textAlign: 'right' },
 });

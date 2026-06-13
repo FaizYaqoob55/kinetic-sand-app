@@ -7,7 +7,10 @@
     "dev": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "patterns:clone": "git clone https://github.com/FaizYaqoob55/patterns-zanvora-sand.git patterns-zanvora-sand",
+    "patterns:pull": "cd patterns-zanvora-sand && git pull",
+    "patterns:manifest": "node scripts/generate-manifest.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.1.3",
@@ -22,6 +25,7 @@
     "expo-barcode-scanner": "~12.9.0",
     "expo-blur": "~12.9.0",
     "expo-camera": "~14.1.3",
+    "expo-file-system": "~16.0.6",
     "expo-font": "~11.10.0",
     "expo-haptics": "~12.8.0",
     "expo-linear-gradient": "~12.7.0",

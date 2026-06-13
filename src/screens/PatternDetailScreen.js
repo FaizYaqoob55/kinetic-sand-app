@@ -1,685 +1,517 @@
-// src/screens/PatternDetailScreen.js — Premium Luxury Rebuild
+// src/screens/PatternDetailScreen.js — Immersive Oasis / Sandsara pattern detail
 import React, { useRef, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  Animated, ScrollView, Alert, Dimensions, Platform,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  Alert, Dimensions, PanResponder, Animated, Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle, Line, Path, Ellipse, G } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
-import Colors from '../constants/colors';
 import { getDifficultyColor, formatDuration } from '../constants/patterns';
 import FluidNCService from '../services/FluidNCService';
-import { setPlaying, addToPlaylist } from '../store/tableSlice';
-import { toggleFavorite } from '../store/patternSlice';
-import { SandPreview } from '../components/SandPreview';
+import PatternRemoteService from '../services/PatternRemoteService';
+import { setPlaying, setStopped, addToPlaylist, setSpeed } from '../store/tableSlice';
+import { toggleFavorite, addDownloaded } from '../store/patternSlice';
+import { PatternCanvas } from '../components/PatternLibraryCard';
 import HapticService from '../services/HapticService';
 
-const { width, height } = Dimensions.get('window');
-const isWeb = Platform.OS === 'web';
-const CONTENT_W = isWeb ? Math.min(width, 460) : width;
+const { width } = Dimensions.get('window');
+const HERO_SIZE = Math.min(width - 40, 360);
+const CANVAS_SIZE = HERO_SIZE * 0.8;
+const RING_R = HERO_SIZE * 0.46;
+const RING_CIRC = 2 * Math.PI * RING_R;
 
-// ─── Hero Sand Preview ──────────────────────────────────────────────────────────
-const HeroSandPreview = ({ patternId }) => {
-  const s = CONTENT_W;
-  const cx = s / 2, cy = s / 2;
-  const gold = '#8A6A2C';
-  const goldFaint = '#4A3A1C';
+const AMBER = '#F0A030';
+const AMBER_BRIGHT = '#FFB84D';
+const AMBER_DARK = '#C07A20';
+const AMBER_MUTED = '#B8864A';
+const TEXT_MUTED = '#9A8070';
+const BG = '#000000';
+const CARD = '#0D0D0D';
+const CARD_BORDER = '#1E1E1E';
+const AMBER_GRAD = ['#FFB84D', AMBER, AMBER_DARK];
 
-  const getArt = (id) => {
-    if (id.startsWith('m')) return (
-      <>
-        {[88, 72, 56, 44, 32, 20, 10].map(r => (
-          <Circle key={r} cx={cx} cy={cy} r={r} fill="none" stroke={gold} strokeWidth={r > 50 ? '0.7' : '0.9'} opacity={r > 60 ? '0.25' : '0.4'} />
-        ))}
-        {[0, 30, 60, 90, 120, 150].map(a => {
-          const rad = (a * Math.PI) / 180;
-          return <Line key={a} x1={cx - Math.cos(rad) * 88} y1={cy - Math.sin(rad) * 88}
-            x2={cx + Math.cos(rad) * 88} y2={cy + Math.sin(rad) * 88} stroke={goldFaint} strokeWidth="0.6" opacity="0.35" />;
-        })}
-        {[60, 46, 30].map(r => (
-          <Circle key={`i${r}`} cx={cx} cy={cy} r={r} fill="none" stroke={`${gold}80`} strokeWidth="0.5" strokeDasharray="4 6" />
-        ))}
-      </>
-    );
-    if (id.startsWith('g')) return (
-      <>
-        <Path d={`M${cx},${cy-80} L${cx+69},${cy-40} L${cx+69},${cy+40} L${cx},${cy+80} L${cx-69},${cy+40} L${cx-69},${cy-40} Z`} fill="none" stroke={gold} strokeWidth="1" opacity="0.4" />
-        <Path d={`M${cx},${cy-56} L${cx+48},${cy-28} L${cx+48},${cy+28} L${cx},${cy+56} L${cx-48},${cy+28} L${cx-48},${cy-28} Z`} fill="none" stroke={gold} strokeWidth="0.8" opacity="0.5" />
-        <Path d={`M${cx},${cy-34} L${cx+29},${cy-17} L${cx+29},${cy+17} L${cx},${cy+34} L${cx-29},${cy+17} L${cx-29},${cy-17} Z`} fill="none" stroke={gold} strokeWidth="0.7" opacity="0.6" />
-        <Path d={`M${cx},${cy-14} L${cx+12},${cy-7} L${cx+12},${cy+7} L${cx},${cy+14} L${cx-12},${cy+7} L${cx-12},${cy-7} Z`} fill="none" stroke={gold} strokeWidth="0.9" opacity="0.7" />
-        {[0, 60, 120].map(a => {
-          const rad = (a * Math.PI) / 180;
-          return <Line key={a} x1={cx} y1={cy} x2={cx + Math.cos(rad) * 80} y2={cy + Math.sin(rad) * 80} stroke={goldFaint} strokeWidth="0.5" opacity="0.3" />;
-        })}
-      </>
-    );
-    if (id.startsWith('n')) return (
-      <>
-        {[90, 78, 66, 54, 42, 30, 18, 8].map(r => (
-          <Circle key={r} cx={cx} cy={cy} r={r} fill="none" stroke={gold} strokeWidth="0.8"
-            opacity={0.15 + (90 - r) / 90 * 0.45} />
-        ))}
-        <Line x1={cx} y1={cy - 90} x2={cx} y2={cy + 90} stroke={goldFaint} strokeWidth="0.5" opacity="0.25" />
-        <Line x1={cx - 90} y1={cy} x2={cx + 90} y2={cy} stroke={goldFaint} strokeWidth="0.5" opacity="0.25" />
-      </>
-    );
-    if (id.startsWith('s')) return (
-      <>
-        {Array.from({ length: 8 }).map((_, i) => {
-          const t = i / 8;
-          const r = 10 + t * 76;
-          const angle = t * Math.PI * 4;
-          const x = cx + Math.cos(angle) * r;
-          const y = cy + Math.sin(angle) * r;
-          return <Circle key={i} cx={x} cy={y} r={3 + i * 0.8} fill="none" stroke={gold} strokeWidth="0.8" opacity={0.3 + t * 0.5} />;
-        })}
-        {Array.from({ length: 60 }).map((_, i) => {
-          const t = i / 60;
-          const r = 10 + t * 76;
-          const angle = t * Math.PI * 4;
-          const nx = cx + Math.cos(angle) * r;
-          const ny = cy + Math.sin(angle) * r;
-          const nr = 10 + (t + 0.016) * 76;
-          const nangle = (t + 0.016) * Math.PI * 4;
-          const nx2 = cx + Math.cos(nangle) * nr;
-          const ny2 = cy + Math.sin(nangle) * nr;
-          return <Line key={i} x1={nx} y1={ny} x2={nx2} y2={ny2} stroke={gold} strokeWidth="0.9" opacity={0.2 + t * 0.4} />;
-        })}
-      </>
-    );
-    // default — concentric with star burst
-    return (
-      <>
-        {[88, 70, 54, 40, 28, 16, 6].map(r => (
-          <Circle key={r} cx={cx} cy={cy} r={r} fill="none" stroke={gold} strokeWidth="0.8"
-            opacity={0.15 + (88 - r) / 88 * 0.5} />
-        ))}
-        {[0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5].map(a => {
-          const rad = (a * Math.PI) / 180;
-          return <Line key={a} x1={cx} y1={cy}
-            x2={cx + Math.cos(rad) * 88} y2={cy + Math.sin(rad) * 88}
-            stroke={goldFaint} strokeWidth="0.6" opacity="0.3" />;
-        })}
-      </>
-    );
-  };
+const DIFF_LABELS = { smooth: 'Easy', detailed: 'Medium', complex: 'Advanced' };
 
+const ProgressRing = ({ progress, active }) => {
+  const offset = RING_CIRC - (Math.min(100, progress) / 100) * RING_CIRC;
+  const cx = HERO_SIZE / 2;
   return (
-    <Svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
-      {getArt(patternId)}
+    <Svg width={HERO_SIZE} height={HERO_SIZE} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Circle
+        cx={cx} cy={cx} r={RING_R}
+        fill="none" stroke="rgba(240,160,48,0.12)" strokeWidth={3}
+      />
+      {active && (
+        <Circle
+          cx={cx} cy={cx} r={RING_R}
+          fill="none" stroke={AMBER} strokeWidth={3}
+          strokeDasharray={RING_CIRC}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          rotation="-90"
+          origin={`${cx}, ${cx}`}
+        />
+      )}
     </Svg>
   );
 };
 
-// ─── Animated Wave Bars ─────────────────────────────────────────────────────────
-const WaveAnimation = () => {
-  const anims = useRef([
-    new Animated.Value(0.3),
-    new Animated.Value(0.6),
-    new Animated.Value(1),
-    new Animated.Value(0.6),
-    new Animated.Value(0.3),
-  ]).current;
+const DeviceHero = ({ pattern, isPlaying, progress }) => {
+  const pulse = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
-    anims.forEach((anim, i) => {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim, { toValue: 1, duration: 400 + i * 80, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0.2, duration: 400 + i * 80, useNativeDriver: true }),
-        ])
-      );
-      setTimeout(() => loop.start(), i * 120);
-    });
-  }, []);
+    if (!isPlaying) {
+      pulse.setValue(0.5);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.4, duration: 1600, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isPlaying, pulse]);
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, height: 20 }}>
-      {anims.map((anim, i) => (
-        <Animated.View
-          key={i}
-          style={{
-            width: 3,
-            height: 18,
-            borderRadius: 2,
-            backgroundColor: Colors.primary,
-            transform: [{ scaleY: anim }],
-          }}
-        />
-      ))}
+    <View style={dh.wrap}>
+      <LinearGradient colors={['#4A3424', '#2E2014', '#141008']} style={dh.wood} />
+      <ProgressRing progress={progress} active={isPlaying} />
+      <Animated.View style={[dh.ledGlow, { opacity: pulse }]} />
+      <View style={[dh.ledRing, isPlaying && dh.ledRingActive]} />
+      <View style={dh.canvasClip}>
+        <PatternCanvas pattern={pattern} size={CANVAS_SIZE} intense showGlow={isPlaying} />
+      </View>
+      {isPlaying && (
+        <View style={dh.livePill}>
+          <View style={dh.liveDot} />
+          <Text style={dh.liveTxt}>Drawing · {Math.round(progress)}%</Text>
+        </View>
+      )}
     </View>
   );
 };
 
-// ─── Main Screen ────────────────────────────────────────────────────────────────
-export default function PatternDetailScreen({ navigation, route }) {
-  const { pattern } = route.params;
-  const dispatch = useDispatch();
-  const { isConnected, currentPattern, isPlaying } = useSelector(s => s.table);
-  const { favorites } = useSelector(s => s.pattern);
-  const isFav = favorites.includes(pattern.id);
-  const isCurrentlyPlaying = isPlaying && currentPattern?.id === pattern.id;
+const dh = StyleSheet.create({
+  wrap: {
+    width: HERO_SIZE, height: HERO_SIZE, borderRadius: HERO_SIZE / 2,
+    alignSelf: 'center', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  wood: { ...StyleSheet.absoluteFillObject, borderRadius: HERO_SIZE / 2 },
+  ledGlow: {
+    position: 'absolute', width: HERO_SIZE * 0.92, height: HERO_SIZE * 0.92,
+    borderRadius: HERO_SIZE * 0.46, backgroundColor: 'rgba(240,160,48,0.1)',
+  },
+  ledRing: {
+    position: 'absolute', width: HERO_SIZE * 0.88, height: HERO_SIZE * 0.88,
+    borderRadius: HERO_SIZE * 0.44, borderWidth: 2,
+    borderColor: 'rgba(240,160,48,0.28)',
+  },
+  ledRingActive: { borderColor: 'rgba(240,160,48,0.65)' },
+  canvasClip: {
+    width: CANVAS_SIZE, height: CANVAS_SIZE, borderRadius: CANVAS_SIZE / 2,
+    overflow: 'hidden',
+  },
+  livePill: {
+    position: 'absolute', bottom: 22, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.72)', paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 20, borderWidth: 1, borderColor: 'rgba(240,160,48,0.35)',
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: AMBER },
+  liveTxt: { fontSize: 11, fontWeight: '700', color: AMBER, letterSpacing: 0.3 },
+});
 
-  const slideAnim = useRef(new Animated.Value(60)).current;
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.92)).current;
-  const glowAnim  = useRef(new Animated.Value(0)).current;
+const SpeedSlider = ({ value, onRelease }) => {
+  const [local, setLocal] = useState(value);
+  const trackW = useRef(1);
+  const valRef = useRef(value);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.spring(slideAnim, { toValue: 0, tension: 80, friction: 12, useNativeDriver: true }),
-      Animated.timing(fadeAnim,  { toValue: 1, duration: 450, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, tension: 80, friction: 12, useNativeDriver: true }),
-    ]).start();
+    setLocal(value);
+    valRef.current = value;
+  }, [value]);
 
-    // Subtle glow pulse on preview
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 2800, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 2800, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
+  const update = (x) => {
+    const c = Math.max(0, Math.min(trackW.current, x));
+    const v = Math.round((c / trackW.current) * 100);
+    setLocal(v);
+    valRef.current = v;
+  };
+
+  const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => update(e.nativeEvent.locationX),
+    onPanResponderMove: (e) => update(e.nativeEvent.locationX),
+    onPanResponderRelease: () => { HapticService.light(); onRelease(valRef.current); },
+  })).current;
+
+  const pct = Math.max(0, Math.min(100, local));
+
+  return (
+    <View style={sl.wrap}>
+      <View style={sl.labelRow}>
+        <Ionicons name="speedometer-outline" size={15} color={TEXT_MUTED} />
+        <Text style={sl.label}>Speed</Text>
+        <Text style={sl.val}>{local}%</Text>
+      </View>
+      <View
+        style={sl.track}
+        onLayout={(e) => { trackW.current = e.nativeEvent.layout.width || 1; }}
+        {...pan.panHandlers}
+      >
+        <View style={sl.trackBg} />
+        <View style={[sl.fillWrap, { width: `${pct}%` }]}>
+          <LinearGradient colors={AMBER_GRAD} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={sl.fill} />
+        </View>
+        <View style={[sl.thumbGlow, { left: `${pct}%` }]} />
+        <View style={[sl.thumb, { left: `${pct}%` }]} />
+      </View>
+    </View>
+  );
+};
+
+const sl = StyleSheet.create({
+  wrap: { marginBottom: 14 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  label: { flex: 1, fontSize: 13, color: '#DDD', fontWeight: '500' },
+  val: { fontSize: 13, color: AMBER, fontWeight: '700' },
+  track: { height: 14, justifyContent: 'center', position: 'relative' },
+  trackBg: { height: 3, borderRadius: 2, backgroundColor: '#2A2520', position: 'absolute', left: 0, right: 0, top: 5.5 },
+  fillWrap: { position: 'absolute', left: 0, top: 5.5, height: 3, borderRadius: 2, overflow: 'hidden' },
+  fill: { flex: 1 },
+  thumbGlow: {
+    position: 'absolute', top: 0, marginLeft: -11, width: 22, height: 22,
+    borderRadius: 11, backgroundColor: 'rgba(240,160,48,0.22)',
+  },
+  thumb: {
+    position: 'absolute', top: 3, marginLeft: -7, width: 14, height: 14,
+    borderRadius: 7, backgroundColor: AMBER_BRIGHT,
+    shadowColor: AMBER, shadowOpacity: 0.9, shadowRadius: 8,
+  },
+});
+
+const DockAction = ({ icon, label, onPress, active }) => (
+  <Pressable style={st.dockAction} onPress={onPress}>
+    <View style={[st.dockIcon, active && st.dockIconActive]}>
+      <Ionicons name={icon} size={18} color={active ? '#1A1208' : AMBER_MUTED} />
+    </View>
+    <Text style={st.dockLbl}>{label}</Text>
+  </Pressable>
+);
+
+const RelatedCard = ({ item, onPress }) => (
+  <TouchableOpacity style={st.relCard} onPress={onPress} activeOpacity={0.88}>
+    <View style={st.relPreview}>
+      <PatternCanvas pattern={item} size={72} showGlow={false} />
+    </View>
+    <Text style={st.relName} numberOfLines={2}>{item.name}</Text>
+    <Text style={st.relDur}>{formatDuration(item.duration)}</Text>
+  </TouchableOpacity>
+);
+
+export default function PatternDetailScreen({ navigation, route }) {
+  const { pattern } = route.params;
+  const insets = useSafeAreaInsets();
+  const dispatch = useDispatch();
+  const { isConnected, currentPattern, isPlaying, speed, progress } = useSelector((s) => s.table);
+  const { favorites, patterns } = useSelector((s) => s.pattern);
+
+  const isFav = favorites.includes(pattern.id);
+  const isActive = isPlaying && currentPattern?.id === pattern.id;
+  const diffColor = getDifficultyColor(pattern.difficulty);
+  const dockH = 220 + insets.bottom;
+
+  const related = patterns.filter(
+    (p) => p.id !== pattern.id && (p.category === pattern.category || pattern.category === 'all'),
+  ).slice(0, 6);
 
   const handlePlay = async () => {
     HapticService.medium();
     if (!isConnected) {
-      Alert.alert('Not Connected', 'Please connect your SandTable first.', [
-        { text: 'Connect', onPress: () => { HapticService.light(); navigation.navigate('Connect'); } },
+      Alert.alert('Not Connected', 'Connect your Oasis Mini to draw this pattern.', [
+        { text: 'Connect', onPress: () => navigation.navigate('Connect') },
         { text: 'Cancel', style: 'cancel' },
       ]);
       return;
     }
     try {
       dispatch(setPlaying(pattern));
-      await FluidNCService.runPattern(pattern.file);
+      await PatternRemoteService.playPattern(pattern, { speed });
+      dispatch(addDownloaded(pattern.id));
       navigation.navigate('NowPlaying');
     } catch {
       HapticService.error();
-      Alert.alert('Error', 'Could not start pattern.');
+      Alert.alert('Error', 'Could not download or start pattern. Check Wi‑Fi and table connection.');
     }
   };
 
-  const handleAddPlaylist = () => {
-    HapticService.success();
-    dispatch(addToPlaylist(pattern));
-    Alert.alert('Added', `"${pattern.name}" added to playlist.`);
+  const handleStop = async () => {
+    HapticService.heavy();
+    try {
+      await FluidNCService.stop();
+      dispatch(setStopped());
+    } catch {
+      Alert.alert('Error', 'Could not stop pattern.');
+    }
   };
 
-  const diffColor = getDifficultyColor(pattern.difficulty);
-  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.22] });
+  const handleSpeed = async (val) => {
+    dispatch(setSpeed(val));
+    if (isConnected) {
+      try { await FluidNCService.setSpeed(val); } catch {}
+    }
+  };
+
+  const handlePlaylist = () => {
+    HapticService.success();
+    dispatch(addToPlaylist(pattern));
+    Alert.alert('Added', `"${pattern.name}" added to your playlist.`);
+  };
 
   return (
-    <View style={styles.root}>
-      {/* Deep background */}
-      <LinearGradient
-        colors={['#06060C', '#0C0C16', '#0A0A12']}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Ambient glow behind art */}
-      <Animated.View style={[styles.ambientGlow, { opacity: glowOpacity }]} />
-
-      {/* ── HERO ART AREA ── */}
-      <Animated.View style={[styles.heroArea, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-        {/* Outer decorative rings */}
-        <View style={styles.outerRing1} />
-        <View style={styles.outerRing2} />
-        <View style={styles.outerRing3} />
-
-        {/* The sand art SVG */}
-        <HeroSandPreview patternId={pattern.id} />
-
-        {/* Radial gradient fade at bottom */}
-        <LinearGradient
-          colors={['transparent', 'rgba(6,6,12,0.55)', 'rgba(6,6,12,0.97)', '#06060C']}
-          style={styles.heroFade}
-          pointerEvents="none"
-        />
-      </Animated.View>
-
-      {/* ── TOP NAV ── */}
-      <View style={styles.topNav}>
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => { HapticService.light(); navigation.goBack(); }}
-        >
-          <Ionicons name="chevron-back" size={20} color="#D0D0D0" />
-        </TouchableOpacity>
-
-        <View style={styles.navRight}>
-          {isCurrentlyPlaying && (
-            <View style={styles.nowPlayingPill}>
-              <WaveAnimation />
-              <Text style={styles.nowPlayingLabel}>Playing</Text>
-            </View>
-          )}
+    <View style={st.root}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          st.scroll,
+          { paddingTop: insets.top + 12, paddingBottom: dockH + 16 },
+        ]}
+      >
+        {/* Floating header */}
+        <View style={st.header}>
+          <TouchableOpacity style={st.iconBtn} onPress={() => { HapticService.light(); navigation.goBack(); }}>
+            <Ionicons name="chevron-back" size={22} color="#EEE" />
+          </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.navBtn, isFav && styles.navBtnFav]}
+            style={[st.iconBtn, isFav && st.iconBtnFav]}
             onPress={() => { HapticService.light(); dispatch(toggleFavorite(pattern.id)); }}
           >
-            <Ionicons
-              name={isFav ? 'heart' : 'heart-outline'}
-              size={20}
-              color={isFav ? '#E05A5A' : '#888'}
-            />
+            <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={20} color={isFav ? '#FF6B8A' : '#AAA'} />
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* ── INFO SHEET (slides up) ── */}
-      <Animated.View style={[
-        styles.infoSheet,
-        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-      ]}>
-        <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-          {/* Handle bar */}
-          <View style={styles.sheetHandle} />
+        <DeviceHero pattern={pattern} isPlaying={isActive} progress={progress} />
 
-          {/* Title + Category */}
-          <View style={styles.titleBlock}>
+        <View style={st.info}>
+          <Text style={st.eyebrow}>{pattern.category}</Text>
+          <Text style={st.name}>{pattern.name}</Text>
+          <View style={st.metaLine}>
+            <Ionicons name="time-outline" size={13} color={AMBER_MUTED} />
+            <Text style={st.metaTxt}>{formatDuration(pattern.duration)}</Text>
+            <Text style={st.metaSep}>·</Text>
+            <View style={[st.metaDot, { backgroundColor: diffColor }]} />
+            <Text style={st.metaTxt}>{DIFF_LABELS[pattern.difficulty] || pattern.difficulty}</Text>
             {pattern.isNew && (
-              <View style={styles.newBadge}>
-                <Text style={styles.newBadgeTxt}>NEW</Text>
-              </View>
+              <>
+                <Text style={st.metaSep}>·</Text>
+                <Text style={st.metaNew}>NEW</Text>
+              </>
             )}
-            <Text style={styles.patternName}>{pattern.name}</Text>
-            <View style={styles.categoryRow}>
-              <View style={[styles.diffDot, { backgroundColor: diffColor }]} />
-              <Text style={styles.categoryText}>{pattern.category}  ·  {pattern.difficulty}</Text>
-            </View>
           </View>
+          {pattern.description ? (
+            <Text style={st.desc}>{pattern.description}</Text>
+          ) : null}
+        </View>
 
-          {/* Description */}
-          <Text style={styles.desc}>{pattern.description}</Text>
-
-          {/* Stats cards row */}
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <View style={styles.statIconCircle}>
-                <Ionicons name="time-outline" size={18} color={Colors.primary} />
-              </View>
-              <Text style={styles.statVal}>{formatDuration(pattern.duration)}</Text>
-              <Text style={styles.statLab}>Duration</Text>
-            </View>
-            <View style={styles.statDiv} />
-            <View style={styles.statCard}>
-              <View style={[styles.statIconCircle, { backgroundColor: `${diffColor}18` }]}>
-                <View style={[styles.diffDotLg, { backgroundColor: diffColor }]} />
-              </View>
-              <Text style={styles.statVal}>{pattern.difficulty}</Text>
-              <Text style={styles.statLab}>Complexity</Text>
-            </View>
-            <View style={styles.statDiv} />
-            <View style={styles.statCard}>
-              <View style={styles.statIconCircle}>
-                <Ionicons name="layers-outline" size={18} color="#6A8AFF" />
-              </View>
-              <Text style={styles.statVal}>{pattern.category}</Text>
-              <Text style={styles.statLab}>Style</Text>
-            </View>
-          </View>
-
-          {/* Tip card */}
-          <View style={styles.tipCard}>
-            <View style={styles.tipIcon}>
-              <Ionicons name="bulb" size={14} color={Colors.primary} />
-            </View>
-            <Text style={styles.tipText}>
-              Each run creates a unique sand texture. Try different LED colors to complement the pattern's mood.
-            </Text>
-          </View>
-
-          {/* Action buttons */}
-          <View style={styles.actions}>
-            <TouchableOpacity style={styles.addBtn} onPress={handleAddPlaylist}>
-              <Ionicons name="add-circle-outline" size={18} color="#6A8AFF" />
-              <Text style={styles.addBtnTxt}>Playlist</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.playBtn, !isConnected && styles.playBtnDisabled]}
-              onPress={handlePlay}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={isCurrentlyPlaying ? ['#2E7D32', '#1B5E20'] : ['#C9A84C', '#9A7230']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={styles.playBtnGrad}
+        {related.length > 0 && (
+          <View style={st.relatedSection}>
+            <View style={st.relatedHead}>
+              <Text style={st.relatedTitle}>More like this</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  HapticService.light();
+                  navigation.navigate('Main', { screen: 'Library' });
+                }}
               >
-                <Ionicons
-                  name={isCurrentlyPlaying ? 'stop' : 'play'}
-                  size={20}
-                  color="#0A0A0F"
+                <Text style={st.seeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.relatedScroll}>
+              {related.map((item) => (
+                <RelatedCard
+                  key={item.id}
+                  item={item}
+                  onPress={() => {
+                    HapticService.light();
+                    navigation.replace('PatternDetail', { pattern: item });
+                  }}
                 />
-                <Text style={styles.playBtnTxt}>
-                  {isCurrentlyPlaying ? 'Stop' : 'Play Now'}
-                </Text>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Fixed bottom dock */}
+      <View style={[st.dock, { paddingBottom: insets.bottom + 12 }]}>
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.85)', '#000']}
+          style={st.dockFade}
+          pointerEvents="none"
+        />
+        <View style={st.dockCard}>
+          <SpeedSlider value={speed} onRelease={handleSpeed} />
+
+          {isActive ? (
+            <View style={st.activeRow}>
+              <TouchableOpacity style={st.nowBtn} onPress={() => navigation.navigate('NowPlaying')}>
+                <Ionicons name="expand-outline" size={18} color={AMBER} />
+                <Text style={st.nowTxt}>Now Playing</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.stopBtn} onPress={handleStop}>
+                <Ionicons name="stop" size={18} color="#FF7B7B" />
+                <Text style={st.stopTxt}>Stop</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[st.playBtn, !isConnected && st.playBtnOff]}
+              onPress={handlePlay}
+              activeOpacity={0.9}
+            >
+              <LinearGradient colors={AMBER_GRAD} style={st.playGrad}>
+                <Ionicons name="play" size={24} color="#1A1208" style={{ marginLeft: 2 }} />
+                <Text style={st.playTxt}>Draw Pattern</Text>
               </LinearGradient>
             </TouchableOpacity>
-          </View>
+          )}
 
-          <View style={{ height: 40 }} />
-        </ScrollView>
-      </Animated.View>
+          {!isConnected && (
+            <TouchableOpacity style={st.connectRow} onPress={() => navigation.navigate('Connect')}>
+              <Ionicons name="wifi-outline" size={14} color={AMBER} />
+              <Text style={st.connectTxt}>Tap to connect your table</Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={st.dockActions}>
+            <DockAction
+              icon="sunny-outline"
+              label="Lights"
+              onPress={() => { HapticService.light(); navigation.navigate('LEDControl'); }}
+            />
+            <DockAction
+              icon="time-outline"
+              label="Timer"
+              onPress={() => { HapticService.light(); navigation.navigate('Schedule'); }}
+            />
+            <DockAction
+              icon="add-circle-outline"
+              label="Playlist"
+              onPress={handlePlaylist}
+            />
+            <DockAction
+              icon="grid-outline"
+              label="Browse"
+              onPress={() => { HapticService.light(); navigation.navigate('Main', { screen: 'Library' }); }}
+            />
+          </View>
+        </View>
+      </View>
     </View>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────────
-const CONTENT_H = isWeb ? Math.min(height, 900) : height;
-const HERO_H = CONTENT_H * 0.52;
-const SHEET_TOP = CONTENT_H * 0.42;
+const st = StyleSheet.create({
+  root: { flex: 1, backgroundColor: BG },
+  scroll: { paddingHorizontal: 20 },
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#06060C',
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 4,
   },
+  iconBtn: {
+    width: 42, height: 42, borderRadius: 12, backgroundColor: CARD,
+    borderWidth: 1, borderColor: CARD_BORDER, alignItems: 'center', justifyContent: 'center',
+  },
+  iconBtnFav: { borderColor: 'rgba(255,107,138,0.3)', backgroundColor: 'rgba(255,107,138,0.08)' },
 
-  ambientGlow: {
-    position: 'absolute',
-    top: HERO_H * 0.1,
-    left: CONTENT_W * 0.1,
-    width: CONTENT_W * 0.8,
-    height: HERO_H * 0.8,
-    borderRadius: CONTENT_W * 0.4,
-    backgroundColor: Colors.primary,
-    zIndex: 0,
+  info: { alignItems: 'center', marginTop: 20, paddingHorizontal: 12 },
+  eyebrow: {
+    fontSize: 11, fontWeight: '700', color: AMBER_MUTED,
+    letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 8,
   },
-
-  // ── Hero ──
-  heroArea: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: CONTENT_W,
-    height: HERO_H + 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    zIndex: 1,
+  name: {
+    fontSize: 30, fontWeight: '700', color: '#FFFFFF', textAlign: 'center',
+    letterSpacing: -0.4, marginBottom: 10,
   },
-  outerRing1: {
-    position: 'absolute',
-    width: CONTENT_W * 0.9,
-    height: CONTENT_W * 0.9,
-    borderRadius: CONTENT_W * 0.45,
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.06)',
-  },
-  outerRing2: {
-    position: 'absolute',
-    width: CONTENT_W * 1.1,
-    height: CONTENT_W * 1.1,
-    borderRadius: CONTENT_W * 0.55,
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.04)',
-  },
-  outerRing3: {
-    position: 'absolute',
-    width: CONTENT_W * 1.3,
-    height: CONTENT_W * 1.3,
-    borderRadius: CONTENT_W * 0.65,
-    borderWidth: 1,
-    borderColor: 'rgba(201,168,76,0.025)',
-  },
-  heroFade: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: HERO_H * 0.55,
-  },
-
-  // ── Top Nav ──
-  topNav: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 52,
-    paddingHorizontal: 18,
-    zIndex: 10,
-  },
-  navRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  navBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(20,20,30,0.75)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navBtnFav: {
-    borderColor: 'rgba(224,90,90,0.35)',
-    backgroundColor: 'rgba(224,90,90,0.1)',
-  },
-  nowPlayingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(20,20,30,0.80)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: `${Colors.primary}30`,
-  },
-  nowPlayingLabel: {
-    fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-
-  // ── Info Sheet ──
-  infoSheet: {
-    position: 'absolute',
-    top: SHEET_TOP,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(8,8,14,0.97)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    paddingHorizontal: 22,
-    zIndex: 5,
-  },
-  sheetHandle: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 20,
-  },
-
-  // ── Title ──
-  titleBlock: {
-    marginBottom: 10,
-  },
-  newBadge: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginBottom: 10,
-  },
-  newBadgeTxt: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#0A0A0F',
-    letterSpacing: 1.2,
-  },
-  patternName: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: '#F4F4F4',
-    letterSpacing: 0.2,
-    marginBottom: 8,
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  diffDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  categoryText: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '500',
-    textTransform: 'capitalize',
-  },
-
-  // ── Description ──
+  metaLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  metaTxt: { fontSize: 13, color: '#CCC', fontWeight: '600' },
+  metaSep: { color: TEXT_MUTED, fontSize: 13 },
+  metaDot: { width: 6, height: 6, borderRadius: 3 },
+  metaNew: { fontSize: 11, fontWeight: '800', color: AMBER, letterSpacing: 0.6 },
   desc: {
-    fontSize: 14,
-    color: '#555',
-    lineHeight: 22,
-    marginTop: 12,
-    marginBottom: 22,
+    fontSize: 14, color: TEXT_MUTED, textAlign: 'center', lineHeight: 21,
+    maxWidth: 320,
   },
 
-  // ── Stats ──
-  statsRow: {
-    flexDirection: 'row',
-    backgroundColor: '#0F0F1A',
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    marginBottom: 14,
+  relatedSection: { marginTop: 28 },
+  relatedHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  relatedTitle: { fontSize: 17, fontWeight: '600', color: '#FFF' },
+  seeAll: { fontSize: 13, fontWeight: '600', color: AMBER },
+  relatedScroll: { gap: 12, paddingRight: 8 },
+  relCard: {
+    width: 108, backgroundColor: CARD, borderRadius: 18,
+    padding: 10, borderWidth: 1, borderColor: CARD_BORDER,
   },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 6,
+  relPreview: {
+    width: 72, height: 72, borderRadius: 36, overflow: 'hidden',
+    alignSelf: 'center', marginBottom: 10,
   },
-  statDiv: {
-    width: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginVertical: 4,
+  relName: { fontSize: 12, fontWeight: '600', color: '#EEE', textAlign: 'center', marginBottom: 4, minHeight: 32 },
+  relDur: { fontSize: 11, color: AMBER_MUTED, textAlign: 'center', fontWeight: '600' },
+
+  dock: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    paddingHorizontal: 16, paddingTop: 8,
   },
-  statIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: `${Colors.primary}18`,
-    alignItems: 'center',
-    justifyContent: 'center',
+  dockFade: {
+    position: 'absolute', left: 0, right: 0, top: -40, height: 40,
   },
-  diffDotLg: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  statVal: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#D4D4D4',
-    textTransform: 'capitalize',
-  },
-  statLab: {
-    fontSize: 10,
-    color: '#444',
-    fontWeight: '500',
+  dockCard: {
+    backgroundColor: CARD, borderRadius: 24, padding: 18,
+    borderWidth: 1, borderColor: CARD_BORDER,
   },
 
-  // ── Tip ──
-  tipCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    backgroundColor: `${Colors.primary}0A`,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: `${Colors.primary}1A`,
-    marginBottom: 22,
+  playBtn: { borderRadius: 16, overflow: 'hidden', marginBottom: 12 },
+  playBtnOff: { opacity: 0.5 },
+  playGrad: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, paddingVertical: 16,
   },
-  tipIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: `${Colors.primary}20`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
-  tipText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 20,
-  },
+  playTxt: { fontSize: 17, fontWeight: '700', color: '#1A1208' },
 
-  // ── Actions ──
-  actions: {
-    flexDirection: 'row',
-    gap: 12,
+  activeRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  nowBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 14, borderRadius: 14, backgroundColor: 'rgba(240,160,48,0.08)',
+    borderWidth: 1, borderColor: 'rgba(240,160,48,0.28)',
   },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    backgroundColor: 'rgba(106,138,255,0.08)',
-    borderRadius: 16,
-    paddingVertical: 17,
-    paddingHorizontal: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(106,138,255,0.18)',
+  nowTxt: { fontSize: 15, fontWeight: '600', color: AMBER },
+  stopBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 14, borderRadius: 14, backgroundColor: 'rgba(255,80,80,0.08)',
+    borderWidth: 1, borderColor: 'rgba(255,123,123,0.28)',
   },
-  addBtnTxt: {
-    color: '#6A8AFF',
-    fontSize: 14,
-    fontWeight: '600',
+  stopTxt: { fontSize: 15, fontWeight: '600', color: '#FF7B7B' },
+
+  connectRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginBottom: 10, paddingVertical: 4,
   },
-  playBtn: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+  connectTxt: { fontSize: 12, color: AMBER, fontWeight: '500' },
+
+  dockActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  dockAction: { alignItems: 'center', gap: 6, flex: 1 },
+  dockIcon: {
+    width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: CARD_BORDER,
   },
-  playBtnDisabled: {
-    opacity: 0.45,
-    shadowOpacity: 0,
-  },
-  playBtnGrad: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 17,
-    gap: 8,
-  },
-  playBtnTxt: {
-    color: '#0A0A0F',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
+  dockIconActive: { backgroundColor: AMBER, borderColor: AMBER },
+  dockLbl: { fontSize: 10, color: AMBER_MUTED, fontWeight: '500' },
 });

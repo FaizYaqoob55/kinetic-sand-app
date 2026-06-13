@@ -10,8 +10,48 @@ import store from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
 import FluidNCService from './src/services/FluidNCService';
 import WebSocketService from './src/services/WebSocketService';
+import PatternRemoteService from './src/services/PatternRemoteService';
 import Storage, { STORAGE_KEYS } from './src/utils/storage';
 import { setConnected } from './src/store/tableSlice';
+import { setSyncLoading, setRemotePatterns, setSyncError } from './src/store/patternSlice';
+
+// ── Sync patterns from GitHub repo ───────────────────────────────────────────
+async function syncPatterns({ force = false } = {}) {
+  try {
+    store.dispatch(setSyncLoading());
+    const result = await PatternRemoteService.sync({ force });
+    if (result?.patterns?.length) {
+      store.dispatch(setRemotePatterns({
+        patterns: result.patterns,
+        version: result.version,
+        updatedAt: result.updatedAt,
+        newCount: result.newCount,
+        lastSyncAt: Date.now(),
+      }));
+      if (result.newCount > 0) {
+        Toast.show({
+          type: 'success',
+          text1: `${result.newCount} new pattern${result.newCount > 1 ? 's' : ''}`,
+          text2: 'Fresh designs from Zanvora Sand',
+          visibilityTime: 3500,
+        });
+      }
+    }
+  } catch (err) {
+    const cached = await PatternRemoteService.getCachedManifest();
+    if (cached?.patterns?.length) {
+      store.dispatch(setRemotePatterns({
+        patterns: cached.patterns,
+        version: cached.version,
+        updatedAt: cached.updatedAt,
+        newCount: 0,
+        lastSyncAt: cached.lastSyncAt || Date.now(),
+      }));
+    } else {
+      store.dispatch(setSyncError(err?.message || 'Pattern sync failed'));
+    }
+  }
+}
 
 // ── Auto-connect on app start ─────────────────────────────────────────────────
 async function tryAutoConnect() {
@@ -40,6 +80,7 @@ async function tryAutoConnect() {
 
 export default function App() {
   useEffect(() => {
+    syncPatterns();
     tryAutoConnect();
   }, []);
 
