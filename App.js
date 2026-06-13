@@ -10,12 +10,34 @@ import store from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
 import FluidNCService from './src/services/FluidNCService';
 import WebSocketService from './src/services/WebSocketService';
+import { BUNDLED_PATTERNS, BUNDLED_META } from './src/utils/patternManifest';
 import PatternRemoteService from './src/services/PatternRemoteService';
 import Storage, { STORAGE_KEYS } from './src/utils/storage';
 import { setConnected } from './src/store/tableSlice';
 import { setSyncLoading, setRemotePatterns, setSyncError } from './src/store/patternSlice';
 
 // ── Sync patterns from GitHub repo ───────────────────────────────────────────
+async function hydratePatterns() {
+  const cached = await PatternRemoteService.getCachedManifest();
+  if (cached?.patterns?.length) {
+    store.dispatch(setRemotePatterns({
+      patterns: cached.patterns,
+      version: cached.version,
+      updatedAt: cached.updatedAt,
+      newCount: cached.newCount || 0,
+      lastSyncAt: cached.lastSyncAt || Date.now(),
+    }));
+    return;
+  }
+  store.dispatch(setRemotePatterns({
+    patterns: BUNDLED_PATTERNS,
+    version: BUNDLED_META.version,
+    updatedAt: BUNDLED_META.updatedAt,
+    newCount: 0,
+    lastSyncAt: null,
+  }));
+}
+
 async function syncPatterns({ force = false } = {}) {
   try {
     store.dispatch(setSyncLoading());
@@ -48,6 +70,13 @@ async function syncPatterns({ force = false } = {}) {
         lastSyncAt: cached.lastSyncAt || Date.now(),
       }));
     } else {
+      store.dispatch(setRemotePatterns({
+        patterns: BUNDLED_PATTERNS,
+        version: BUNDLED_META.version,
+        updatedAt: BUNDLED_META.updatedAt,
+        newCount: 0,
+        lastSyncAt: null,
+      }));
       store.dispatch(setSyncError(err?.message || 'Pattern sync failed'));
     }
   }
@@ -80,7 +109,7 @@ async function tryAutoConnect() {
 
 export default function App() {
   useEffect(() => {
-    syncPatterns();
+    hydratePatterns().then(() => syncPatterns());
     tryAutoConnect();
   }, []);
 

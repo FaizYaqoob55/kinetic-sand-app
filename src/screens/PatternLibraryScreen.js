@@ -69,6 +69,10 @@ const DIFFICULTY_FILTERS = [
 
 const CATEGORY_CHIPS = PATTERN_CATEGORIES.filter(c => c.id !== 'favorites');
 
+const REMOTE_CATEGORY_CHIPS = PATTERN_CATEGORIES.filter(c =>
+  ['all', 'featured', 'favorites'].includes(c.id),
+);
+
 function sortPatterns(list, sortId) {
   const copy = [...list];
   switch (sortId) {
@@ -93,7 +97,7 @@ export default function PatternLibraryScreen({ navigation }) {
   const searchRef = useRef(null);
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  const { favorites, patterns, newCount: remoteNewCount, syncStatus } = useSelector(s => s.pattern);
+  const { favorites, patterns, newCount: remoteNewCount, syncStatus, useRemote } = useSelector(s => s.pattern);
   const { isPlaying, currentPattern, progress } = useSelector(s => s.table);
 
   const [search, setSearch] = useState('');
@@ -103,6 +107,9 @@ export default function PatternLibraryScreen({ navigation }) {
   const [sortId, setSortId] = useState('popular');
   const [viewMode, setViewMode] = useState('grid');
   const [heroIndex, setHeroIndex] = useState(0);
+  const [showNewOnly, setShowNewOnly] = useState(false);
+
+  const categoryChips = useRemote ? REMOTE_CATEGORY_CHIPS : CATEGORY_CHIPS;
 
   const featured = useMemo(() => patterns.filter(p => p.category === 'featured'), [patterns]);
   const heroPatterns = useMemo(() => featured.slice(0, 4), [featured]);
@@ -131,21 +138,32 @@ export default function PatternLibraryScreen({ navigation }) {
     if (remoteNewCount > 0) dispatch(clearNewCount());
   }, []);
 
+  useEffect(() => {
+    if (useRemote && category !== 'all' && category !== 'featured' && category !== 'favorites') {
+      setCategory('all');
+    }
+  }, [useRemote, category]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let list = patterns.filter(p => {
-      const catOk = category === 'all' || category === 'favorites' || p.category === category;
+      const catOk = useRemote
+        ? (category === 'all'
+          || (category === 'featured' && p.category === 'featured')
+          || (category === 'favorites' && favorites.includes(p.id)))
+        : (category === 'all' || category === 'favorites' || p.category === category);
       const favOk = category !== 'favorites' || favorites.includes(p.id);
+      const newOk = !showNewOnly || p.isNew;
       const diffOk = !difficulty || p.difficulty === difficulty;
       const searchOk = !q
         || p.name.toLowerCase().includes(q)
         || (p.description || '').toLowerCase().includes(q)
         || p.category.includes(q)
         || (p.slug || '').toLowerCase().includes(q);
-      return catOk && favOk && diffOk && searchOk;
+      return catOk && favOk && newOk && diffOk && searchOk;
     });
     return sortPatterns(list, sortId);
-  }, [patterns, search, category, difficulty, sortId, favorites]);
+  }, [patterns, search, category, difficulty, sortId, favorites, useRemote, showNewOnly]);
 
   const stickyOpacity = scrollY.interpolate({ inputRange: [180, 240], outputRange: [0, 1], extrapolate: 'clamp' });
   const heroParallax = scrollY.interpolate({ inputRange: [0, 200], outputRange: [0, -30], extrapolate: 'clamp' });
@@ -213,9 +231,9 @@ export default function PatternLibraryScreen({ navigation }) {
       </Animated.View>
 
       <View style={styles.statsRow}>
-        <StatChip icon="grid-outline" value={patterns.length} label="Total" active={category === 'all'} onPress={() => { HapticService.light(); setCategory('all'); }} />
-        <StatChip icon="sparkles-outline" value={newCount} label="New" active={category === 'featured'} onPress={() => { HapticService.light(); setCategory('featured'); }} />
-        <StatChip icon="heart" value={favorites.length} label="Saved" active={category === 'favorites'} onPress={() => { HapticService.light(); setCategory('favorites'); }} />
+        <StatChip icon="grid-outline" value={patterns.length} label="Total" active={category === 'all' && !showNewOnly} onPress={() => { HapticService.light(); setCategory('all'); setShowNewOnly(false); }} />
+        <StatChip icon="sparkles-outline" value={newCount} label="New" active={showNewOnly} onPress={() => { HapticService.light(); setCategory('all'); setShowNewOnly(true); }} />
+        <StatChip icon="heart" value={favorites.length} label="Saved" active={category === 'favorites'} onPress={() => { HapticService.light(); setCategory('favorites'); setShowNewOnly(false); }} />
       </View>
 
       {isPlaying && currentPattern && (
@@ -243,10 +261,10 @@ export default function PatternLibraryScreen({ navigation }) {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {CATEGORY_CHIPS.map(chip => {
-          const active = category === chip.id;
+        {categoryChips.map(chip => {
+          const active = category === chip.id && !(chip.id === 'all' && showNewOnly);
           return (
-            <Pressable key={chip.id} style={[styles.chip, active && styles.chipActive]} onPress={() => { HapticService.light(); setCategory(chip.id); }}>
+            <Pressable key={chip.id} style={[styles.chip, active && styles.chipActive]} onPress={() => { HapticService.light(); setCategory(chip.id); setShowNewOnly(false); }}>
               <Ionicons name={chip.icon} size={14} color={active ? '#1A1208' : AMBER_MUTED} />
               <Text style={[styles.chipText, active && styles.chipTextActive]}>{chip.name}</Text>
             </Pressable>

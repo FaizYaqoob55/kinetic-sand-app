@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import axios from 'axios';
 import PATTERN_REPO, { manifestUrl, rawFileUrl } from '../constants/patternRepo';
 import bundledManifest from '../../pattern-manifest/manifest.json';
+import { normalizePattern } from '../utils/patternManifest';
 import Storage, { STORAGE_KEYS } from '../utils/storage';
 import FluidNCService from './FluidNCService';
 
@@ -15,9 +16,6 @@ const CACHE_DIR = `${FileSystem.documentDirectory}patterns/`;
 const SVG_DIR = `${CACHE_DIR}svg/`;
 const THR_DIR = `${CACHE_DIR}thr/`;
 
-const slugToName = (slug) =>
-  slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
-
 const slugToId = (slug) => `z_${slug.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
 class PatternRemoteService {
@@ -27,31 +25,19 @@ class PatternRemoteService {
   }
 
   async ensureDirs() {
-    for (const dir of [CACHE_DIR, SVG_DIR, THR_DIR]) {
-      const info = await FileSystem.getInfoAsync(dir);
-      if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    if (!FileSystem.documentDirectory) return;
+    try {
+      for (const dir of [CACHE_DIR, SVG_DIR, THR_DIR]) {
+        const info = await FileSystem.getInfoAsync(dir);
+        if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      }
+    } catch {
+      // Web or restricted env — previews still work via remote URL
     }
   }
 
   normalizeEntry(raw, index = 0) {
-    const slug = raw.slug || raw.file?.replace(/\.thr$/, '') || raw.id;
-    return {
-      id: raw.id || slugToId(slug),
-      slug,
-      name: raw.name || slugToName(slug),
-      category: raw.category || (index < 12 ? 'featured' : 'all'),
-      file: raw.file || `${slug}.thr`,
-      previewSvg: raw.previewSvg || `previews/${slug}.svg`,
-      machinePath: raw.machinePath || `patterns/${slug}.thr`,
-      fileSize: raw.fileSize || 0,
-      duration: raw.duration || 0,
-      difficulty: raw.difficulty || 'smooth',
-      description: raw.description || '',
-      isNew: !!raw.isNew,
-      isRemote: true,
-      previewUrl: rawFileUrl(raw.previewSvg || `previews/${slug}.svg`),
-      machineUrl: rawFileUrl(raw.machinePath || `patterns/${slug}.thr`),
-    };
+    return normalizePattern(raw, index);
   }
 
   async bootstrapFromGitHub() {
@@ -72,12 +58,11 @@ class PatternRemoteService {
         return this.normalizeEntry({
           id: slugToId(slug),
           slug,
-          name: slugToName(slug),
-          category: i < 12 ? 'featured' : 'all',
           file: f.name,
           previewSvg: `previews/${slug}.svg`,
           machinePath: `patterns/${f.name}`,
           fileSize: f.size,
+          category: i < 12 ? 'featured' : 'all',
         }, i);
       });
 
@@ -113,7 +98,11 @@ class PatternRemoteService {
   }
 
   async sync({ force = false } = {}) {
-    if (this.syncing) return null;
+    if (this.syncing) {
+      const cached = await Storage.get(CACHE_KEY, null);
+      return cached?.patterns?.length ? cached : null;
+    }
+
     if (!force && !(await this.shouldSync())) {
       const cached = await Storage.get(CACHE_KEY, null);
       if (cached?.patterns?.length) return cached;
@@ -157,21 +146,31 @@ class PatternRemoteService {
 
   async getPreviewUri(pattern) {
     if (!pattern?.slug) return null;
+    const url = pattern.previewUrl || rawFileUrl(pattern.previewSvg);
+
+    // Web: use remote SVG URL directly (no local cache)
+    if (typeof window !== 'undefined' && (!FileSystem.documentDirectory || typeof FileSystem.downloadAsync !== 'function')) {
+      return url;
+    }
+
     await this.ensureDirs();
     const localPath = `${SVG_DIR}${pattern.slug}.svg`;
-    const info = await FileSystem.getInfoAsync(localPath);
-    if (info.exists) return localPath;
+    try {
+      const info = await FileSystem.getInfoAsync(localPath);
+      if (info.exists) return localPath;
+    } catch {
+      return url;
+    }
 
     const key = pattern.slug;
     if (this.previewInflight.has(key)) return this.previewInflight.get(key);
 
     const task = (async () => {
       try {
-        const url = pattern.previewUrl || rawFileUrl(pattern.previewSvg);
         const result = await FileSystem.downloadAsync(url, localPath);
         return result.uri;
       } catch {
-        return pattern.previewUrl || rawFileUrl(pattern.previewSvg);
+        return url;
       } finally {
         this.previewInflight.delete(key);
       }

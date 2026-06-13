@@ -1,24 +1,23 @@
 // src/store/patternSlice.js
 import { createSlice } from '@reduxjs/toolkit';
-import { PATTERNS } from '../constants/patterns';
+import { BUNDLED_PATTERNS, BUNDLED_META } from '../utils/patternManifest';
 
 const patternSlice = createSlice({
   name: 'pattern',
   initialState: {
-    patterns: PATTERNS,
+    patterns: BUNDLED_PATTERNS,
     favorites: [],
     downloaded: [],
     searchQuery: '',
-    selectedCategory: 'featured',
+    selectedCategory: 'all',
     sortBy: 'name',
-    // Remote repo sync
-    remoteVersion: null,
-    remoteUpdatedAt: null,
+    remoteVersion: BUNDLED_META.version,
+    remoteUpdatedAt: BUNDLED_META.updatedAt,
     newCount: 0,
-    syncStatus: 'idle', // idle | loading | ready | error
+    syncStatus: 'ready',
     syncError: null,
     lastSyncAt: null,
-    useRemote: false,
+    useRemote: true,
   },
   reducers: {
     toggleFavorite: (state, action) => {
