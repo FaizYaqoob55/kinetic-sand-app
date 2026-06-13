@@ -266,11 +266,11 @@ export default function HomeScreen({ navigation }) {
             {/* Pattern thumbnail */}
             <View style={styles.playerThumb}>
               {currentPattern ? (
-                {currentPattern?.isRemote ? (
+                currentPattern?.isRemote ? (
                   <RemotePatternPreview pattern={currentPattern} size={42} />
                 ) : (
                   <SandPreview patternId={currentPattern.id} size={42} />
-                )}
+                )
               ) : (
                 <Image
                   source={require('../assets/pattern_waves.png')}
