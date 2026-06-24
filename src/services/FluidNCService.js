@@ -22,17 +22,39 @@ class FluidNCService {
 
   // ─── PING / CHECK CONNECTION ───────────────────────────────────────
   async ping() {
-    try {
-      const res = await axios.get(`${this.baseURL}/`, { timeout: 3000 });
-      return res.status === 200;
-    } catch {
-      return false;
-    }
+    return new Promise((resolve) => {
+      let resolved = false;
+      const ip = this.baseURL.replace('http://', '');
+
+      // Attempt 1: HTTP (might fail in browser due to CORS)
+      axios.get(`${this.baseURL}/`, { timeout: 3000 })
+        .then(() => {
+          if (!resolved) { resolved = true; resolve(true); }
+        })
+        .catch(() => {});
+
+      // Attempt 2: WebSocket (works around CORS for testing in browser)
+      try {
+        const ws = new WebSocket(`ws://${ip}:81`);
+        ws.onopen = () => {
+          ws.close();
+          if (!resolved) { resolved = true; resolve(true); }
+        };
+        ws.onerror = () => {
+          // ignore, wait for timeout or HTTP
+        };
+      } catch (e) {}
+
+      // Timeout fallback
+      setTimeout(() => {
+        if (!resolved) { resolved = true; resolve(false); }
+      }, 3500);
+    });
   }
 
   // ─── AUTO DISCOVER ESP32 ON NETWORK ────────────────────────────────
   async autoDiscover() {
-    const subnets = ['192.168.1', '192.168.0', '10.0.0'];
+    const subnets = ['192.168.1', '192.168.0', '192.168.100', '10.0.0'];
     for (const subnet of subnets) {
       const promises = [];
       for (let i = 1; i < 255; i++) {
