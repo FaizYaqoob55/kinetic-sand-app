@@ -22,34 +22,20 @@ class FluidNCService {
 
   // ─── PING / CHECK CONNECTION ───────────────────────────────────────
   async ping() {
-    return new Promise((resolve) => {
-      let resolved = false;
-      const ip = this.baseURL.replace('http://', '');
+    try {
+      if (typeof window !== 'undefined' && window.document) {
+        // We are on Web. Axios fails due to CORS. Use fetch with no-cors to ping.
+        // It won't let us read the body, but it won't throw a CORS error if the IP is reachable.
+        await fetch(`${this.baseURL}/`, { mode: 'no-cors', cache: 'no-store' });
+        return true;
+      }
 
-      // Attempt 1: HTTP (might fail in browser due to CORS)
-      axios.get(`${this.baseURL}/`, { timeout: 3000 })
-        .then(() => {
-          if (!resolved) { resolved = true; resolve(true); }
-        })
-        .catch(() => {});
-
-      // Attempt 2: WebSocket (works around CORS for testing in browser)
-      try {
-        const ws = new WebSocket(`ws://${ip}:81`);
-        ws.onopen = () => {
-          ws.close();
-          if (!resolved) { resolved = true; resolve(true); }
-        };
-        ws.onerror = () => {
-          // ignore, wait for timeout or HTTP
-        };
-      } catch (e) {}
-
-      // Timeout fallback
-      setTimeout(() => {
-        if (!resolved) { resolved = true; resolve(false); }
-      }, 3500);
-    });
+      // On Native (iOS/Android), no CORS restrictions.
+      const res = await axios.get(`${this.baseURL}/`, { timeout: 3000 });
+      return res.status === 200;
+    } catch (err) {
+      return false;
+    }
   }
 
   // ─── AUTO DISCOVER ESP32 ON NETWORK ────────────────────────────────
