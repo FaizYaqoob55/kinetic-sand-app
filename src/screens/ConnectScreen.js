@@ -120,7 +120,24 @@ export default function ConnectScreen({ navigation }) {
     }
   };
 
-  // Demo mode removed — only real hardware connection supported
+  const handleDemoMode = async () => {
+    HapticService.success();
+    const savedData = {
+      ip: '192.168.1.50',
+      name: 'Demo SandTable',
+      id: 'demo-table-id',
+      connectedAt: new Date().toISOString(),
+    };
+    await AsyncStorage.setItem('tableData', JSON.stringify(savedData));
+    await AsyncStorage.setItem('onboarded', 'true');
+    dispatch(setConnected({
+      connected: true,
+      ip: '192.168.1.50',
+      name: savedData.name,
+      id: savedData.id,
+    }));
+    navigation.replace('Main');
+  };
 
   const spinAngle = logoSpin.interpolate({
     inputRange: [0, 1],
@@ -233,6 +250,12 @@ export default function ConnectScreen({ navigation }) {
             <TouchableOpacity style={styles.autoBtn} onPress={handleAutoDiscover} activeOpacity={0.7}>
               <Ionicons name="search" size={18} color={Colors.accent} />
               <Text style={styles.autoBtnText}>Search Table on Network</Text>
+            </TouchableOpacity>
+
+            {/* Demo / Skip Mode */}
+            <TouchableOpacity style={styles.demoBtn} onPress={handleDemoMode} activeOpacity={0.6}>
+              <Text style={styles.demoBtnText}>Explore Demo Mode</Text>
+              <Ionicons name="arrow-forward-outline" size={14} color="rgba(255,255,255,0.4)" />
             </TouchableOpacity>
 
             {/* Help Text */}
@@ -413,6 +436,20 @@ const styles = StyleSheet.create({
     color: Colors.accentLight,
     fontSize: 14,
     fontWeight: '700',
+  },
+  demoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  demoBtnText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    fontWeight: '600',
   },
   helpBox: {
     flexDirection: 'row',
