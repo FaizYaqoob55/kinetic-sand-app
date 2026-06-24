@@ -120,26 +120,7 @@ export default function ConnectScreen({ navigation }) {
     }
   };
 
-  const handleDemoMode = async () => {
-    HapticService.success();
-    const savedData = {
-      ip: '192.168.1.50',
-      name: 'Demo SandTable',
-      id: 'demo-table-id',
-      connectedAt: new Date().toISOString(),
-    };
-    await AsyncStorage.setItem('tableData', JSON.stringify(savedData));
-    await AsyncStorage.setItem('onboarded', 'true');
-
-    dispatch(setConnected({
-      connected: true,
-      ip: '192.168.1.50',
-      name: savedData.name,
-      id: savedData.id,
-    }));
-
-    navigation.replace('Main');
-  };
+  // Demo mode removed — only real hardware connection supported
 
   const spinAngle = logoSpin.interpolate({
     inputRange: [0, 1],
@@ -254,11 +235,13 @@ export default function ConnectScreen({ navigation }) {
               <Text style={styles.autoBtnText}>Search Table on Network</Text>
             </TouchableOpacity>
 
-            {/* Demo / Skip Mode */}
-            <TouchableOpacity style={styles.demoBtn} onPress={handleDemoMode} activeOpacity={0.6}>
-              <Text style={styles.demoBtnText}>Explore Demo Mode</Text>
-              <Ionicons name="arrow-forward-outline" size={14} color="rgba(255,255,255,0.4)" />
-            </TouchableOpacity>
+            {/* Help Text */}
+            <View style={styles.helpBox}>
+              <Ionicons name="information-circle-outline" size={15} color="rgba(255,255,255,0.3)" />
+              <Text style={styles.helpText}>
+                Table IP can be found in your router's device list or on the ESP32 serial monitor.
+              </Text>
+            </View>
           </View>
 
         </ScrollView>
@@ -431,18 +414,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  demoBtn: {
+  helpBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    alignItems: 'flex-start',
+    gap: 8,
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 4,
   },
-  demoBtnText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 13,
-    fontWeight: '600',
+  helpText: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 11,
+    lineHeight: 16,
   },
   connectingCard: {
     alignItems: 'center',
