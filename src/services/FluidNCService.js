@@ -67,14 +67,21 @@ class FluidNCService {
   // ─── SEND GCODE COMMAND ────────────────────────────────────────────
   async sendCommand(cmd) {
     if (!this.isConnected) throw new Error('Not connected');
+    const url = `${this.baseURL}/command?commandText=${encodeURIComponent(cmd)}`;
+    
     try {
-      const res = await axios.get(
-        `${this.baseURL}/command?commandText=${encodeURIComponent(cmd)}`,
-        { timeout: this.timeout }
-      );
+      if (typeof window !== 'undefined' && window.document) {
+        // Web browser: use no-cors to bypass CORS blocks and avoid OPTIONS preflights
+        await fetch(url, { mode: 'no-cors', cache: 'no-store' });
+        return 'OK'; // Can't read response in no-cors mode, assume success
+      }
+      
+      const res = await axios.get(url, { timeout: this.timeout });
       return res.data;
     } catch (err) {
-      throw new Error(`Command failed: ${err.message}`);
+      console.warn(`Command failed: ${cmd}`, err.message);
+      // We don't throw error to prevent UI from breaking just because of network logs
+      return null;
     }
   }
 
